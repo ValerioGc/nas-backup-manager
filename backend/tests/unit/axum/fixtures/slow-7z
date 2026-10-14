@@ -1,0 +1,3 @@
+#!/bin/sh
+# A 7z that takes its time: a run has to be stopped to end.
+exec sleep 30

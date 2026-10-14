@@ -1,0 +1,187 @@
+# Changelog
+
+All notable changes to nas-backup-manager are documented in this file.
+
+## [Unreleased]
+
+### Changed
+
+- The Cloud section offers no new rule until a network disk is configured: the notice points to
+  the disk manager, and a failed reading of the disks says so with a retry.
+- The errors are short alerts with their sign, the options of the steps are switches, and the
+  folders are named source and destination folder.
+- The texts of the interface, in Italian and English, are impersonal and shorter: no ellipsis,
+  colon or semicolon, no names of internal programs, commands or variables.
+- The scrollbars come from the shared library, which shows only their thumb: no arrows and no
+  track.
+
+### Fixed
+
+- The icon of the state of the last run (in progress, done, failed, interrupted, never) was
+  missing in the build: PurgeCSS removed its classes, named at runtime, now kept.
+
+### Removed
+
+- An empty `CommonModal.vue`, the unused `lock.svg` icon, the unused text `columns.status` and
+  comments that only named the markup below them.
+
+## [0.1.15]
+
+### Changed
+
+- Maintenance release.
+
+## [0.1.14]
+
+### Changed
+
+- Maintenance release.
+
+## [0.1.13]
+
+### Fixed
+
+- On a NAS whose time zone is UTC the scheduled rules had no next run: systemd-analyze writes no
+  `(in UTC)` line there, and its `Next elapse` is now read instead. The list showed "-" and the
+  rules never started.
+- 7-Zip gets the password of a new archive twice: the versions that ask to confirm it (p7zip
+  16.02, as on Ubuntu 22.04) stopped with "password verification failed".
+
+### Changed
+
+- The trash of a disk (`.nas-trash`, nas-file-manager) is never backed up nor followed in real
+  time.
+- The files of `assets/`, with a hash of their content in the name, are served with
+  `Cache-Control: public, max-age=31536000, immutable`, the page with `no-cache`: the browser keeps
+  the scripts and the styles between visits instead of asking for them again through the gateway
+  and the launcher.
+- The launcher bridge (under the adapter of `src/services/nasShell.ts`), the shared styles, the
+  layout with its sidebar, the confirmation dialogs, the empty list, the power schedule ranges,
+  the schedule texts and the build, package and release scripts come from the shared library
+  `@valeriogc/nas-base-app`.
+
+## [0.1.12]
+
+### Added
+
+- The list of the rules shows the kind of each schedule and its time ("Weekly · 03:00", the whole
+  of it on hover), in the scheduled and cloud sections.
+- `GET api/volumes`: the names of the disks, from the registry of the launcher. The folders of a
+  rule show the name of their disk instead of its id.
+
+### Changed
+
+- The folders step: origin and destination side by side with an arrow between them, each with the
+  name of its disk and the path in it; the buttons say Select and Change.
+- The database is one migration in its final form, with `STRICT` tables, the list of the copied
+  files `WITHOUT ROWID` and no index nothing used. An existing database does not open: install
+  from scratch.
+
+### Fixed
+
+- The icon of the empty list follows the theme: it stayed black on the dark one. Its circle keeps
+  its own colour.
+
+## [0.1.11]
+
+### Added
+
+- The rules run for real. A scheduled rule runs at its time (`systemd-analyze calendar`, local time
+  of the NAS; a missed time is skipped), a real-time one when its origin changes (`notify`,
+  inotify), on the changed files only. Filters include or exclude files by extension, dates, size
+  in MB or name; the rename adds its text before the name or before the extension; the archive is
+  7z, AES-256, its names encrypted when asked, tested when asked, with the password on the input of
+  7z. A mirror removes only the copies the rule made whose original is gone, never anything else; a
+  copy never removes. Every copy is written aside and renamed into place, and checked byte by byte
+  when asked.
+- A rule has a name, can be turned on and off, edited and deleted; a real-time rule watches its
+  origin and may write into it. The list shows the outcome of the last run (an icon, with date,
+  time and reason on hover), the next run and the buttons to run or stop a rule now.
+- Each run shows among the operations of the launcher, where it can be stopped; the application
+  stays on while a scheduled or real-time rule is on (`run.background`), and asks for `7zip`.
+
+### Changed
+
+- The passwords of the rules never go back to the browser: a rule saved with an empty one keeps it.
+- The rename preview puts the text after the name before the extension, as the rename does.
+- Origin and destination cannot be one inside the other either way, and a mirror cannot take a
+  whole disk as its destination.
+
+- In the frame of the launcher the application keeps the rules of its old sandbox by itself
+  (`src/services/frameGuard.ts`, called first in `main.ts`): no window of its own, no
+  `alert`/`confirm`/`prompt` dialog, no navigation of the page that holds it. The launcher dropped
+  the sandbox, which on its origin was no wall and made the browser warn: nothing else changes.
+- The side menu lists Cloud last, after the scheduled and the real-time backups.
+
+### Fixed
+
+- The icons outside the buttons (the side menu, the closing crosses of the windows) follow the
+  theme: they stayed black on the dark one.
+
+## [0.1.10]
+
+### Changed
+
+- Maintenance release.
+
+## [0.1.9]
+
+### Changed
+
+- Maintenance release.
+
+## [0.1.8]
+
+### Changed
+
+- The sidebar holds only the sections and stays in place while the page scrolls; the add buttons
+  show a plus icon.
+
+## [0.1.7]
+
+### Changed
+
+- Maintenance release.
+
+## [0.1.6]
+
+### Changed
+
+- The surfaces follow the theme chosen in the launcher for its type, through the colours of the
+  context; outside the launcher the application keeps its own.
+
+## [0.1.5]
+
+### Changed
+
+- Maintenance release.
+
+## [0.1.4]
+
+### Changed
+
+- Maintenance release.
+
+## [0.1.3]
+
+### Changed
+
+- Maintenance release.
+
+## [0.1.2]
+
+### Changed
+
+- Maintenance release.
+
+## [0.1.1]
+
+### Changed
+
+- Maintenance release.
+
+## [0.1.0]
+
+### Added
+
+- Prima struttura dell'app: pacchetto NAS, pipeline di rilascio e pagina iniziale nel launcher.

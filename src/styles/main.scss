@@ -1,0 +1,39 @@
+@use '@valeriogc/nas-base-app/styles/_nas-theme.scss';
+@use '@valeriogc/nas-base-app/styles/partials/_reset.scss';
+@use '@valeriogc/nas-base-app/styles/_nas-apps.scss';
+@use '@valeriogc/nas-base-app/styles/_nas-layout.scss';
+@use '@valeriogc/nas-base-app/styles/_nas-buttons.scss';
+@use '@valeriogc/nas-base-app/styles/_nas-confirm-dialog.scss';
+@use '@valeriogc/nas-base-app/styles/_nas-empty-state.scss';
+@use '@valeriogc/nas-base-app/styles/_nas-scrollbar.scss';
+@use '@valeriogc/nas-base-app/styles/_nas-switch.scss';
+
+// An error is a short alert with its sign, not a line of red text.
+.alert_error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--nas-error) 35%, var(--nas-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--nas-error) 8%, var(--nas-surface));
+  color: var(--nas-foreground);
+  font-size: 13px;
+  line-height: 1.45;
+
+  &::before {
+    content: '!';
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--nas-error);
+    color: var(--nas-surface);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+  }
+}

@@ -1,0 +1,9 @@
+#!/bin/sh
+# A 7z that writes down, beside the archive, how it was called and what it read on its input, and
+# makes the archive it is asked to add to.
+if [ "$1" = a ]; then eval "archive=\${$(($# - 1))}"; else eval "archive=\${$#}"; fi
+calls="$(dirname "$archive")/.calls"
+echo "args: $*" >>"$calls"
+cat >>"$calls"
+if [ "$1" = a ]; then : >"$archive"; fi
+exit 0

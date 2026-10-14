@@ -1,0 +1,4 @@
+#!/bin/sh
+# A 7z that fails, saying why on its error output.
+echo 'disk full' >&2
+exit 2
