@@ -115,12 +115,12 @@ fn ignored(relative: &str, own: Option<&str>) -> bool {
         || own.is_some_and(|archive| !relative.contains('/') && archive::is_own(relative, archive))
 }
 
-/// Watches one rule until it is turned off, changed or removed.
-async fn follow(runner: Arc<Runner>, id: String, watched: Watched) {
-    let (origin, network) = loop {
+/// Waits until the rule's origin is available, retrying while its disk is missing.
+async fn wait_for_origin(runner: &Runner, id: &str, origin: &str) -> (PathBuf, bool) {
+    loop {
         match runner
             .storage()
-            .and_then(|storage| storage.resolve(&watched.origin, false))
+            .and_then(|storage| storage.resolve(origin, false))
         {
             Ok(folder) => break (folder.path, folder.network),
             Err(reason) => {
@@ -128,7 +128,12 @@ async fn follow(runner: Arc<Runner>, id: String, watched: Watched) {
                 tokio::time::sleep(RETRY).await;
             }
         }
-    };
+    }
+}
+
+/// Watches one rule until it is turned off, changed or removed.
+async fn follow(runner: Arc<Runner>, id: String, watched: Watched) {
+    let (origin, network) = wait_for_origin(&runner, &id, &watched.origin).await;
     let (sender, mut changes) = mpsc::channel::<Change>(QUEUE);
     let overflowed = Arc::new(AtomicBool::new(false));
     let watcher = if network {
