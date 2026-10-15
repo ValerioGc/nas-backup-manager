@@ -913,7 +913,7 @@ dependencies = [
 
 [[package]]
 name = "nas-backup-manager-axum"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "aes-gcm",
  "axum",
