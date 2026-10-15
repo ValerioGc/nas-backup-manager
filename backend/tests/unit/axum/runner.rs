@@ -383,3 +383,54 @@ async fn names_an_archive_after_the_local_time() {
     assert_eq!(stamp.len(), 13);
     assert_eq!(&stamp[8..9], "-");
 }
+
+#[tokio::test]
+async fn a_network_origin_gone_empty_never_empties_its_mirror() {
+    let share = Scratch::new("runner-share");
+    let backup = Scratch::new("runner-backup");
+    let state = state_with(share.path(), None).await;
+    let folder = |path: &std::path::Path, network: bool| storage::Folder {
+        path: path.to_path_buf(),
+        volume: path.to_path_buf(),
+        network,
+    };
+    let (origin, destination) = (folder(share.path(), true), folder(backup.path(), false));
+    create(&state, scheduled_rule("rule")).await;
+
+    // Nothing copied yet: an empty share has nothing to protect.
+    assert!(state
+        .runner
+        .network_ready("rule", &origin, &destination, true)
+        .await
+        .is_ok());
+    sqlx::query(
+        "INSERT INTO rule_files (rule_id, parent, name, destination, size, modified)
+         VALUES ('rule', '', 'a', 'a', 1, 1)",
+    )
+    .execute(&state.database)
+    .await
+    .expect("a copy");
+    let stopped = state
+        .runner
+        .network_ready("rule", &origin, &destination, true)
+        .await;
+    assert!(matches!(stopped, Err(Stop::Failed(reason)) if reason.contains("nothing was removed")));
+    // A copy without a mirror removes nothing, and a share with files goes on.
+    assert!(state
+        .runner
+        .network_ready("rule", &origin, &destination, false)
+        .await
+        .is_ok());
+    share.write("b.txt", "b");
+    assert!(state
+        .runner
+        .network_ready("rule", &origin, &destination, true)
+        .await
+        .is_ok());
+    let gone = folder(&share.path().join("missing"), true);
+    assert!(state
+        .runner
+        .network_ready("rule", &origin, &gone, true)
+        .await
+        .is_err());
+}

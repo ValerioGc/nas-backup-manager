@@ -4,9 +4,10 @@
 //! on the changed paths only. It runs on the whole origin when it starts, for what changed while
 //! the application was stopped, and again when the kernel lost changes (its queue overflowed).
 //!
-//! A disk that is not mounted yet is waited for. Where the origin cannot be watched (a network
-//! share, or more folders than the limit of inotify) the rule runs on the whole origin every ten
-//! minutes instead, and the journal of the application says why.
+//! A disk that is not mounted yet is waited for. A network disk is read again every ten minutes:
+//! inotify sees only the changes made by this machine, never those of the other computers of the
+//! share. So is an origin that cannot be watched (more folders than the limit of inotify), and the
+//! journal of the application says why.
 
 use crate::{
     archive, rules,
@@ -116,12 +117,12 @@ fn ignored(relative: &str, own: Option<&str>) -> bool {
 
 /// Watches one rule until it is turned off, changed or removed.
 async fn follow(runner: Arc<Runner>, id: String, watched: Watched) {
-    let origin = loop {
+    let (origin, network) = loop {
         match runner
             .storage()
             .and_then(|storage| storage.resolve(&watched.origin, false))
         {
-            Ok(folder) => break folder.path,
+            Ok(folder) => break (folder.path, folder.network),
             Err(reason) => {
                 eprintln!("<4>{id} waits for its origin: {reason}");
                 tokio::time::sleep(RETRY).await;
@@ -130,13 +131,17 @@ async fn follow(runner: Arc<Runner>, id: String, watched: Watched) {
     };
     let (sender, mut changes) = mpsc::channel::<Change>(QUEUE);
     let overflowed = Arc::new(AtomicBool::new(false));
-    let watcher = watch(
-        &origin,
-        watched.own.clone(),
-        sender,
-        Arc::clone(&overflowed),
-    )
-    .await;
+    let watcher = if network {
+        Err("a network disk tells nothing of the changes of other computers".to_owned())
+    } else {
+        watch(
+            &origin,
+            watched.own.clone(),
+            sender,
+            Arc::clone(&overflowed),
+        )
+        .await
+    };
     if let Err(reason) = &watcher {
         eprintln!("<4>{id} cannot watch {}: {reason}", origin.display());
     }

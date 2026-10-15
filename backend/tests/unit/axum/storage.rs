@@ -3,20 +3,30 @@ use crate::test_support::Scratch;
 
 #[test]
 fn reads_the_disks_of_the_registry() {
-    let volumes = parse_registry("abc\tPhotos\t/srv/storage/abc\tdevice\nnet\tShare\t/mnt/net\n\n")
-        .expect("registry");
+    let volumes = parse_registry(
+        "abc\tPhotos\t/srv/storage/abc\tdevice\nnet\tShare\t/mnt/net\nn-1\tOffice\t/srv/storage/n-1\tnetwork\n\n",
+    )
+    .expect("registry");
     assert_eq!(
         volumes,
         [
             Volume {
                 id: "abc".to_owned(),
                 name: "Photos".to_owned(),
-                path: PathBuf::from("/srv/storage/abc")
+                path: PathBuf::from("/srv/storage/abc"),
+                network: false,
             },
             Volume {
                 id: "net".to_owned(),
                 name: "Share".to_owned(),
-                path: PathBuf::from("/mnt/net")
+                path: PathBuf::from("/mnt/net"),
+                network: false,
+            },
+            Volume {
+                id: "n-1".to_owned(),
+                name: "Office".to_owned(),
+                path: PathBuf::from("/srv/storage/n-1"),
+                network: true,
             },
         ]
     );
@@ -52,11 +62,13 @@ fn takes_only_a_disk_of_the_registry_that_is_mounted() {
             id: "system".to_owned(),
             name: "System".to_owned(),
             path: PathBuf::from("/"),
+            network: true,
         },
         Volume {
             id: "gone".to_owned(),
             name: "Gone".to_owned(),
             path: unmounted.path().to_path_buf(),
+            network: false,
         },
     ]);
 
@@ -64,6 +76,7 @@ fn takes_only_a_disk_of_the_registry_that_is_mounted() {
         .resolve("/system/tmp", false)
         .expect("on a mounted disk");
     assert_eq!(folder.volume, PathBuf::from("/"));
+    assert!(folder.network);
     let refused = storage.resolve("/gone", false).expect_err("not mounted");
     assert!(refused.contains("not mounted"), "{refused}");
     assert!(storage
@@ -110,4 +123,16 @@ fn names_the_disks_for_the_page() {
         }]
     );
     assert!(Storage::Root(PathBuf::from("/tmp")).names().is_empty());
+}
+
+#[tokio::test]
+async fn a_network_folder_says_whether_it_holds_files() {
+    let share = Scratch::new("storage-share");
+    assert_eq!(holds_files(share.path()).await, Ok(false));
+    share.write("a.txt", "a");
+    assert_eq!(holds_files(share.path()).await, Ok(true));
+    assert!(holds_files(&share.path().join("missing"))
+        .await
+        .expect_err("missing")
+        .contains("cannot be read"));
 }

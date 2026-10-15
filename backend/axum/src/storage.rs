@@ -11,7 +11,11 @@
 use std::{
     fs,
     path::{Component, Path, PathBuf},
+    time::Duration,
 };
+
+/// How long a network disk has to answer before a run gives up on it.
+const ANSWER_WITHIN: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Volume {
@@ -19,6 +23,8 @@ pub struct Volume {
     /// What the person calls the disk, as Explorer shows it.
     pub name: String,
     pub path: PathBuf,
+    /// The share of another machine (`network` in the registry): its changes come from elsewhere.
+    pub network: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +40,8 @@ pub enum Storage {
 pub struct Folder {
     pub path: PathBuf,
     pub volume: PathBuf,
+    /// On a network disk.
+    pub network: bool,
 }
 
 /// The volumes of the registry, or why it cannot be read.
@@ -48,6 +56,7 @@ pub fn parse_registry(content: &str) -> Result<Vec<Volume>, String> {
             id: fields[0].to_owned(),
             name: fields[1].to_owned(),
             path: PathBuf::from(fields[2]),
+            network: fields.get(3) == Some(&"network"),
         });
     }
     Ok(volumes)
@@ -84,7 +93,7 @@ impl Storage {
         {
             return Err(format!("{logical} is not a folder of the disks"));
         }
-        let (volume, rest): (PathBuf, Vec<&str>) = match self {
+        let (volume, network, rest): (PathBuf, bool, Vec<&str>) = match self {
             Self::Volumes(volumes) => {
                 let id = segments
                     .next()
@@ -93,9 +102,9 @@ impl Storage {
                     .iter()
                     .find(|volume| volume.id == id)
                     .ok_or_else(|| format!("the disk of {logical} is not connected"))?;
-                (volume.path.clone(), segments.collect())
+                (volume.path.clone(), volume.network, segments.collect())
             }
-            Self::Root(root) => (root.clone(), segments.collect()),
+            Self::Root(root) => (root.clone(), false, segments.collect()),
         };
         let volume = volume
             .canonicalize()
@@ -116,7 +125,11 @@ impl Storage {
         if !path.starts_with(&volume) || !path.is_dir() {
             return Err(format!("{logical} is not a folder of its disk"));
         }
-        Ok(Folder { path, volume })
+        Ok(Folder {
+            path,
+            volume,
+            network,
+        })
     }
 }
 
@@ -139,6 +152,22 @@ impl Storage {
                 })
                 .collect(),
             Self::Root(_) => Vec::new(),
+        }
+    }
+}
+
+/// Whether a folder of a network disk has anything in it, read within a time: a share whose
+/// server is gone fails or hangs, and a run must not wait on it nor take it for empty.
+pub async fn holds_files(path: &Path) -> Result<bool, String> {
+    let folder = path.to_path_buf();
+    let read = tokio::task::spawn_blocking(move || {
+        fs::read_dir(&folder).map(|mut entries| entries.next().is_some())
+    });
+    match tokio::time::timeout(ANSWER_WITHIN, read).await {
+        Err(_) => Err(format!("{} does not answer", path.display())),
+        Ok(Err(_)) => Err("the network disk could not be read".to_owned()),
+        Ok(Ok(listed)) => {
+            listed.map_err(|error| format!("{} cannot be read: {error}", path.display()))
         }
     }
 }

@@ -394,6 +394,8 @@ impl Runner {
             .duplicate_resolution
             .unwrap_or(DuplicateResolution::Ignore);
         let mirror = rule.sync_mode == SyncMode::Mirror && !rule.same_destination;
+        self.network_ready(&rule.id, &origin, &destination, mirror)
+            .await?;
 
         if let Some(options) = &configurations.archive {
             let stamp = stamp().await;
@@ -446,6 +448,42 @@ impl Runner {
             progress,
         };
         sync.run_parts(rule.same_destination, changed).await
+    }
+}
+
+impl Runner {
+    /// A network disk of the rule answers in time; and a network origin that shows nothing while
+    /// a mirror has copies from it is a share gone empty or wrong, not files removed: the run
+    /// stops, the backup untouched.
+    async fn network_ready(
+        &self,
+        rule: &str,
+        origin: &storage::Folder,
+        destination: &storage::Folder,
+        mirror: bool,
+    ) -> Result<(), Stop> {
+        if destination.network {
+            storage::holds_files(&destination.volume)
+                .await
+                .map_err(Stop::Failed)?;
+        }
+        if !origin.network
+            || storage::holds_files(&origin.path)
+                .await
+                .map_err(Stop::Failed)?
+        {
+            return Ok(());
+        }
+        let copies: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rule_files WHERE rule_id = ?")
+            .bind(rule)
+            .fetch_one(&self.database)
+            .await?;
+        if mirror && copies > 0 {
+            return Err(Stop::Failed(
+                "the network disk shows no file: nothing was removed from the backup".to_owned(),
+            ));
+        }
+        Ok(())
     }
 }
 
