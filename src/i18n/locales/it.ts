@@ -129,7 +129,6 @@ export const it = {
     archive: 'Crea un archivio',
     archiveDescription: 'Raggruppa i file selezionati in un archivio.',
     encrypt: 'Cifra i file',
-    encryptDescription: 'Protegge i file selezionati tramite cifratura.',
     notSaved: 'Le operazioni vengono salvate insieme alla regola.',
   },
   operationModals: {

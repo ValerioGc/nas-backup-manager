@@ -226,12 +226,12 @@ impl Archive<'_> {
     /// A new archive, written aside and renamed into place.
     async fn create(&self, target: &Path) -> Result<(), Stop> {
         let temporary = target.with_file_name(format!("{TEMPORARY}{}.7z", std::process::id()));
-        let _ = fs::remove_file(&temporary);
+        let _ = tokio::fs::remove_file(&temporary).await;
         let outcome = async {
             // The password, and its confirmation for the 7-Zip that asks it (p7zip 16.02).
             self.seven(&self.writing("a"), &temporary, 2, Some(self.links))
                 .await?;
-            fs::rename(&temporary, target).map_err(|error| {
+            tokio::fs::rename(&temporary, target).await.map_err(|error| {
                 Stop::Failed(format!(
                     "{} cannot be put in place: {error}",
                     target.display()
@@ -240,7 +240,7 @@ impl Archive<'_> {
         }
         .await;
         if outcome.is_err() {
-            let _ = fs::remove_file(&temporary);
+            let _ = tokio::fs::remove_file(&temporary).await;
         }
         outcome
     }

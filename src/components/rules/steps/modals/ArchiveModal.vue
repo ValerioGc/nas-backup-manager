@@ -1,8 +1,8 @@
 <script setup lang="ts">
 
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from '@/i18n';
-import { NasSwitch } from '@valeriogc/nas-base-app';
+import { NasSwitch, vNasModal } from '@valeriogc/nas-base-app';
 import type { ArchiveConfiguration, CryptConfiguration } from '@/types/backup';
 
 type Variant = 'archive' | 'crypt';
@@ -24,7 +24,6 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const dialog = ref<HTMLDialogElement | null>(null);
 const archiveInitial =
   props.variant === 'archive' && props.initialValue && 'archiveName' in props.initialValue
     ? props.initialValue
@@ -66,26 +65,6 @@ const canSave = computed(
     (props.variant !== 'archive' || archiveName.value.trim().length > 0),
 );
 
-onMounted(() => {
-  if (dialog.value && !dialog.value.open) {
-    if (typeof dialog.value.showModal === 'function') {
-      dialog.value.showModal();
-    } else {
-      dialog.value.setAttribute('open', '');
-    }
-  }
-});
-
-onBeforeUnmount(() => {
-  if (dialog.value?.open) {
-    if (typeof dialog.value.close === 'function') {
-      dialog.value.close();
-    } else {
-      dialog.value.removeAttribute('open');
-    }
-  }
-});
-
 function save() {
   if (!canSave.value) {
     return;
@@ -108,7 +87,7 @@ function save() {
 
 <template>
   <dialog
-    ref="dialog"
+    v-nas-modal
     class="operation_dialog"
     aria-labelledby="operation-dialog-title"
     @cancel.prevent="emit('close')"
@@ -253,27 +232,7 @@ function save() {
 }
 
 .dialog_field {
-  display: grid;
-  gap: 8px;
-  font-weight: 600;
-
-  input,
-  select {
-    width: 100%;
-    min-height: 42px;
-    padding: 9px 12px;
-    border: 1px solid var(--nas-border);
-    border-radius: 8px;
-    background: var(--nas-surface);
-    color: var(--nas-foreground);
-    font: inherit;
-  }
-
-  input:focus-visible,
-  select:focus-visible {
-    outline: 2px solid var(--accent, #3c8fbe);
-    outline-offset: 2px;
-  }
+  @extend %dialog_field;
 }
 
 .password_toggle {

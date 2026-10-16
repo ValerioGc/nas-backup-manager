@@ -15,7 +15,6 @@ import {
 } from '@/services/backupRules';
 import { requestNetworkDisks } from '@/services/nasShell';
 import type { ListedRule, SectionCode } from '@/types/backup';
-import { stubDialog } from '@/tests/component/helpers/dialog';
 import { answerPickers, chooseFolders, networkShare } from '@/tests/component/helpers/folders';
 import { answerPowerSchedule, chooseSchedule } from '@/tests/component/helpers/schedule';
 
@@ -44,7 +43,6 @@ vi.mock('@/services/nasShell', async (importOriginal) => ({
 
 let wrapper: VueWrapper | undefined;
 beforeEach(() => {
-  stubDialog();
   vi.clearAllMocks();
   answerPickers();
   answerPowerSchedule();

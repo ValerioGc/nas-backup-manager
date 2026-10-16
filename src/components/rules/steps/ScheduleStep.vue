@@ -247,19 +247,9 @@ function selected(event: Event) {
 }
 
 .schedule_group {
+  @extend %option_group;
   display: grid;
   gap: 14px;
-  min-width: 0;
-  margin: 0;
-  padding: 16px;
-  border: 1px solid var(--nas-border);
-  border-radius: 10px;
-  background: var(--nas-surface);
-
-  legend {
-    padding: 0 6px;
-    font-weight: 600;
-  }
 }
 
 .schedule_fields {

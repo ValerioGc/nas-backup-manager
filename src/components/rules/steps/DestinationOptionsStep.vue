@@ -83,17 +83,7 @@ const syncMode = defineModel<SyncMode>('syncMode', { default: 'mirror' });
 }
 
 .destination_group {
-  min-width: 0;
-  margin: 0;
-  padding: 16px;
-  border: 1px solid var(--nas-border);
-  border-radius: 10px;
-  background: var(--nas-surface);
-
-  legend {
-    padding: 0 6px;
-    font-weight: 600;
-  }
+  @extend %option_group;
 }
 
 .option_hint {

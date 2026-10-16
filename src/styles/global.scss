@@ -1,1 +1,41 @@
 @forward '@valeriogc/nas-base-app/styles/global.scss';
+
+// A labelled field of the operation dialogs.
+%dialog_field {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+
+  input,
+  select {
+    width: 100%;
+    min-height: 42px;
+    padding: 9px 12px;
+    border: 1px solid var(--nas-border);
+    border-radius: 8px;
+    background: var(--nas-surface);
+    color: var(--nas-foreground);
+    font: inherit;
+  }
+
+  input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--accent, #3c8fbe);
+    outline-offset: 2px;
+  }
+}
+
+// A framed group of options in the rule steps.
+%option_group {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--nas-border);
+  border-radius: 10px;
+  background: var(--nas-surface);
+
+  legend {
+    padding: 0 6px;
+    font-weight: 600;
+  }
+}

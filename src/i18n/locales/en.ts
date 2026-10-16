@@ -126,7 +126,6 @@ export const en = {
     archive: 'Create an archive',
     archiveDescription: 'Group the selected files into an archive.',
     encrypt: 'Encrypt files',
-    encryptDescription: 'Protects the selected files with encryption.',
     notSaved: 'Operations are saved together with the rule.',
   },
   operationModals: {

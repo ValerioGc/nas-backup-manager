@@ -1,6 +1,6 @@
 # Development of nas-backup-manager
 
-The Vue/TypeScript UI is in `src/`; the Rust/Axum backend is in `backend/axum/`. Explorer also keeps `backend/core/` and `backend/tauri/`. The shared scripts are in the library `@valeriogc/nas-base-app`; manifest and version are in `nas-app.json`, `package.json` and the Cargo metadata. `src/assets/logo.svg` is the source of the logo and the UI icons are in `src/assets/icons/`.
+The Vue/TypeScript UI is in `src/`; the Rust/Axum backend is in `backend/axum/`. The shared scripts are in the library `@valeriogc/nas-base-app`; manifest and version are in `nas-app.json`, `package.json` and the Cargo metadata. `src/assets/logo.svg` is the source of the logo and the UI icons are in `src/assets/icons/`.
 
 ## Conventions
 
