@@ -2,9 +2,10 @@ import { expect, test } from '@playwright/test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { storage } from '../../../playwright.config';
+import type { BackupRule } from '@/types/backup';
 
 /** A scheduled rule between two folders of the test's own, as the wizard saves it. */
-function rule(id: string, name: string) {
+function rule(id: string, name: string): BackupRule {
   return {
     id,
     type: 'scheduled',
@@ -47,13 +48,14 @@ function seed(id: string, files: Record<string, string>) {
 test('opens the nas-backup-manager interface', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('main')).toBeVisible();
-  await expect(page.getByRole('button').first()).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Tipi di backup' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cloud', exact: true })).toBeVisible();
 });
 
 test('runs a rule from its row and shows how it went', async ({ page }) => {
   seed('run', { 'report.pdf': 'report', 'sub/photo.jpg': 'photo', 'draft.tmp': 'draft' });
   const created = await page.request.post('/api/rules', { data: rule('run', 'Documents') });
-  expect(created.status()).toBe(201);
+  expect(created.status(), await created.text()).toBe(201);
 
   await page.goto('/');
   const row = page.getByRole('row', { name: /Documents/ });
@@ -71,13 +73,15 @@ test('runs a rule from its row and shows how it went', async ({ page }) => {
   await expect(page.getByRole('tooltip')).toContainText('Completata');
   await expect(page.getByRole('tooltip')).toContainText('Ultima esecuzione');
   await expect(row.getByRole('cell').nth(1)).toHaveText('Giornaliero · 03:00');
+  await expect(row.getByTitle('Ogni giorno alle 03:00')).toBeVisible();
   await expect(row.getByRole('cell').nth(4)).toContainText('/');
   await page.screenshot({ path: '/tmp/nas-backup-rules.png' });
 });
 
 test('turns a rule off, edits its name and removes it', async ({ page }) => {
   seed('edit', { 'a.txt': 'a' });
-  await page.request.post('/api/rules', { data: rule('edit', 'Old name') });
+  const created = await page.request.post('/api/rules', { data: rule('edit', 'Old name') });
+  expect(created.status(), await created.text()).toBe(201);
 
   await page.goto('/');
   const row = page.getByRole('row', { name: /Old name/ });

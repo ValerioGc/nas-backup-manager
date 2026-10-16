@@ -37,6 +37,6 @@ pnpm run nas:package
 pnpm run nas:test
 ```
 
-`pnpm run format` applies Prettier, ESLint and `format-sfc-spacing.mjs`; `pnpm run format:sfc` runs only the last step. The E2E tests start Vite on port 1420; Explorer also starts Axum with a fixture root. `release:merge` creates commit and tag: try it only in an isolated temporary Git repository.
+`pnpm run format` applies Prettier, ESLint and `format-sfc-spacing.mjs`; `pnpm run format:sfc` runs only the last step. The E2E tests start their own Vite on port 14217 and Axum on `nas-backup-manager-e2e.sock`, with temporary storage and database; they never reuse a development server. `release:merge` creates commit and tag: try it only in an isolated temporary Git repository.
 
 The package must work even when moved out of the checkout; do not reference `external-apps/` or files of the launcher. For the full contract see [APPS.md](APPS.md).
