@@ -231,12 +231,14 @@ impl Archive<'_> {
             // The password, and its confirmation for the 7-Zip that asks it (p7zip 16.02).
             self.seven(&self.writing("a"), &temporary, 2, Some(self.links))
                 .await?;
-            tokio::fs::rename(&temporary, target).await.map_err(|error| {
-                Stop::Failed(format!(
-                    "{} cannot be put in place: {error}",
-                    target.display()
-                ))
-            })
+            tokio::fs::rename(&temporary, target)
+                .await
+                .map_err(|error| {
+                    Stop::Failed(format!(
+                        "{} cannot be put in place: {error}",
+                        target.display()
+                    ))
+                })
         }
         .await;
         if outcome.is_err() {

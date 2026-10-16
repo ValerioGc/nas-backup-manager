@@ -3,7 +3,7 @@
   "app": {
     "id": "nas-backup-manager",
     "name": "Backup",
-    "version": "0.1.16",
+    "version": "0.1.17",
     "icon": "icon.svg",
     "category": "storage",
     "system": false
