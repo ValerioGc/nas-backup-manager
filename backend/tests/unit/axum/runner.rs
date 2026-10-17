@@ -32,7 +32,7 @@ async fn last(state: &AppState, id: &str) -> rules::LastRun {
 }
 
 async fn run(state: &AppState, id: &str) {
-    Runner::start(&state.runner, id, None)
+    Runner::start(&state.runner, id, None, true)
         .await
         .expect("started")
         .await
@@ -97,7 +97,7 @@ async fn a_run_that_cannot_work_says_why() {
         },
     )
     .await;
-    let refused = Runner::start(&state.runner, "cloudy", None)
+    let refused = Runner::start(&state.runner, "cloudy", None, true)
         .await
         .expect_err("not yet");
     assert_eq!(refused.status, axum::http::StatusCode::BAD_REQUEST);
@@ -303,7 +303,7 @@ async fn stops_every_run_when_the_application_stops() {
         },
     )
     .await;
-    let handle = Runner::start(&state.runner, "long", None)
+    let handle = Runner::start(&state.runner, "long", None, true)
         .await
         .expect("started");
     tokio::time::sleep(Duration::from_millis(200)).await;
@@ -433,4 +433,12 @@ async fn a_network_origin_gone_empty_never_empties_its_mirror() {
         .network_ready("rule", &origin, &gone, true)
         .await
         .is_err());
+}
+
+#[test]
+fn an_automatic_run_removes_a_quarter_of_the_copies_at_most_and_always_a_hundred() {
+    assert_eq!(removable(0), 100);
+    assert_eq!(removable(-5), 100);
+    assert_eq!(removable(400), 100);
+    assert_eq!(removable(4000), 1000);
 }

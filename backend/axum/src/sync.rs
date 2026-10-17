@@ -8,7 +8,15 @@
 //!
 //! Every copy is written under a hidden temporary name and renamed into place once complete and,
 //! when asked, compared byte by byte with its original: a run stopped halfway leaves no half file.
-//! The work on the disks runs on the blocking threads, never on the two workers of the server.
+//! Each copy is written down as soon as it is in place, and a file of the destination identical
+//! to its original (size and time) is taken as its copy: a run stopped by a crash copies nothing
+//! twice and makes no numbered duplicate. The work on the disks runs on the blocking threads,
+//! never on the two workers of the server.
+//!
+//! What a mirror removes, and a copy that a newer one replaces, goes to the trash of the disk of the
+//! destination ([`Trash`]). An automatic run that would remove more than `removable` copies stops
+//! before it: a burst of deletions in the origin is a mistake or damage until a person runs the
+//! rule by hand.
 //!
 //! In place (a real-time rule that writes into its own origin) the rule renames the files it
 //! takes, and a file that already carries the added text is left as it is.
@@ -18,6 +26,7 @@ use crate::{
     rename,
     rules::{BatchRenameConfiguration, DuplicateResolution},
     storage,
+    trash::Trash,
 };
 use sqlx::{Row, SqlitePool};
 use std::{
@@ -94,6 +103,21 @@ pub struct Sync<'a> {
     pub verify: bool,
     pub cancel: &'a Arc<AtomicBool>,
     pub progress: &'a Progress,
+    /// The trash of the disk of the destination; none on a network disk, where a copy is removed.
+    pub trash: Option<&'a Trash>,
+    /// How many copies the run may remove: past it, it stops before removing any more.
+    pub removable: u64,
+}
+
+/// What a run does with a file of the origin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Plan {
+    /// Its copy is up to date, or the rule leaves it alone.
+    Skip,
+    /// The file already at this path of the destination is its copy: only written down.
+    Adopt(String),
+    /// Copied to this path of the destination.
+    Copy(String),
 }
 
 /// An entry of a folder of the origin.
@@ -183,6 +207,7 @@ pub fn copy_file(
     target: &Path,
     verify: bool,
     cancel: &AtomicBool,
+    trash: Option<&Trash>,
 ) -> Result<(), Stop> {
     let failed = |what: &str, error: io::Error| {
         Stop::Failed(format!("{} {what}: {error}", source.display()))
@@ -230,12 +255,34 @@ pub fn copy_file(
                 source.display()
             )));
         }
-        fs::rename(&temporary, target).map_err(|error| failed("cannot be put in place", error))
+        // The copy it replaces goes to the trash, not away.
+        if let Some(trash) = trash {
+            if fs::symlink_metadata(target).is_ok() {
+                trash
+                    .discard(target)
+                    .map_err(|error| failed("cannot keep the copy it replaces", error))?;
+            }
+        }
+        fs::rename(&temporary, target).map_err(|error| failed("cannot be put in place", error))?;
+        // The rename lasts through a power cut only once the folder is written too.
+        if let Ok(directory) = File::open(folder) {
+            let _ = directory.sync_all();
+        }
+        Ok(())
     })();
     if outcome.is_err() {
         let _ = fs::remove_file(&temporary);
     }
     outcome
+}
+
+/// Whether the file at `path` is the copy of an original of that size and time.
+fn same_file(path: &Path, facts: &Facts, modified: i64) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|metadata| {
+        metadata.is_file()
+            && metadata.len() == facts.size
+            && nanoseconds(metadata.modified().ok()) == modified
+    })
 }
 
 /// Whether two files hold the same bytes.
@@ -270,10 +317,15 @@ fn same_bytes(left: &Path, right: &Path, cancel: &AtomicBool) -> Result<bool, St
     }
 }
 
-/// Removes a copy, then the folders it leaves empty up to the destination.
-fn remove_copy(destination: &Path, relative: &str) -> io::Result<()> {
+/// Removes a copy, to the trash when there is one, then the folders it leaves empty up to the
+/// destination.
+fn remove_copy(destination: &Path, relative: &str, trash: Option<&Trash>) -> io::Result<()> {
     let path = destination.join(relative);
-    match fs::remove_file(&path) {
+    let removed = match trash {
+        Some(trash) if fs::symlink_metadata(&path).is_ok() => trash.discard(&path),
+        _ => fs::remove_file(&path),
+    };
+    match removed {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
@@ -423,12 +475,26 @@ impl Sync<'_> {
         Ok(())
     }
 
+    /// The folders with copies under `root`, read through the index: `root/` up to `root0`, the
+    /// character after the slash, holds every folder under it and nothing else.
     async fn parents_under(&self, root: &str) -> Result<Vec<String>, Stop> {
-        let parents: Vec<String> =
+        let parents: Vec<String> = if root.is_empty() {
             sqlx::query_scalar("SELECT DISTINCT parent FROM rule_files WHERE rule_id = ?")
                 .bind(self.rule_id)
                 .fetch_all(self.db)
-                .await?;
+                .await?
+        } else {
+            sqlx::query_scalar(
+                "SELECT DISTINCT parent FROM rule_files
+                 WHERE rule_id = ? AND (parent = ? OR (parent >= ? AND parent < ?))",
+            )
+            .bind(self.rule_id)
+            .bind(root)
+            .bind(format!("{root}/"))
+            .bind(format!("{root}0"))
+            .fetch_all(self.db)
+            .await?
+        };
         Ok(parents
             .into_iter()
             .filter(|parent| under(root, parent))
@@ -460,6 +526,14 @@ impl Sync<'_> {
         names: &[String],
         records: &HashMap<String, Record>,
     ) -> Result<(), Stop> {
+        let removed = self.progress.removed.load(Ordering::Relaxed);
+        if removed.saturating_add(names.len() as u64) > self.removable {
+            return Err(Stop::Failed(format!(
+                "more than {} files are gone from the origin: nothing more was removed from the \
+                 backup. Check the origin, then run the rule by hand to remove them",
+                self.removable
+            )));
+        }
         let mut gone = Vec::new();
         for name in names {
             let Some(record) = records.get(name) else {
@@ -467,7 +541,8 @@ impl Sync<'_> {
             };
             let destination = self.destination.to_path_buf();
             let relative = record.destination.clone();
-            match blocking(move || remove_copy(&destination, &relative)).await? {
+            let trash = self.trash.cloned();
+            match blocking(move || remove_copy(&destination, &relative, trash.as_ref())).await? {
                 Ok(()) => {
                     self.progress.removed.fetch_add(1, Ordering::Relaxed);
                     gone.push(name.clone());
@@ -491,45 +566,70 @@ impl Sync<'_> {
         Ok(())
     }
 
-    /// Keeps an unchanged copy, updates a mirror's own copy or resolves a conflicting name.
-    fn copy_destination(
-        &self,
-        folder: &str,
-        entry: &Entry,
-        facts: &Facts,
-        record: Option<&Record>,
-    ) -> Option<String> {
+    /// Keeps an unchanged copy, takes an identical file as the copy, updates a mirror's own copy
+    /// or resolves a conflicting name.
+    fn plan(&self, folder: &str, entry: &Entry, facts: &Facts, record: Option<&Record>) -> Plan {
         if record.is_some_and(|record| {
             record.size == facts.size as i64
                 && record.modified == entry.modified
                 && self.destination.join(&record.destination).exists()
         }) {
-            return None;
+            return Plan::Skip;
         }
         let name = self.rename.map_or_else(
             || entry.name.clone(),
             |rename| rename::renamed(&entry.name, rename),
         );
         let wanted = join(folder, &name);
+        // A copy made before a crash, or by hand: the same size and time, nothing to copy again.
+        if record.is_none() && same_file(&self.destination.join(&wanted), facts, entry.modified) {
+            return Plan::Adopt(wanted);
+        }
         // A mirror updates its own copy where it is; any other conflict follows the rule.
         match record {
-            Some(record) if self.mirror => Some(record.destination.clone()),
+            Some(record) if self.mirror => Plan::Copy(record.destination.clone()),
             _ if self.destination.join(&wanted).exists() => match self.resolution {
-                DuplicateResolution::Overwrite => Some(wanted),
-                DuplicateResolution::Ignore => None,
-                DuplicateResolution::Copy => Some(join(
+                DuplicateResolution::Overwrite => Plan::Copy(wanted),
+                DuplicateResolution::Ignore => Plan::Skip,
+                DuplicateResolution::Copy => Plan::Copy(join(
                     folder,
                     &free_name(&self.destination.join(folder), &name),
                 )),
             },
-            _ => Some(wanted),
+            _ => Plan::Copy(wanted),
         }
+    }
+
+    /// Writes down the copy of a file, at once: a crash after it loses nothing.
+    async fn note(
+        &self,
+        folder: &str,
+        name: &str,
+        destination: &str,
+        size: i64,
+        modified: i64,
+    ) -> Result<(), Stop> {
+        sqlx::query(
+            "INSERT INTO rule_files (rule_id, parent, name, destination, size, modified)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT (rule_id, parent, name) DO UPDATE SET
+                destination = excluded.destination, size = excluded.size,
+                modified = excluded.modified",
+        )
+        .bind(self.rule_id)
+        .bind(folder)
+        .bind(name)
+        .bind(destination)
+        .bind(size)
+        .bind(modified)
+        .execute(self.db)
+        .await?;
+        Ok(())
     }
 
     /// The files of one folder: copied when new or changed, their copies removed when gone.
     async fn files(&self, folder: &str, entries: &[Entry]) -> Result<(), Stop> {
         let records = self.records(folder).await?;
-        let mut written: Vec<(String, String, i64, i64)> = Vec::new();
         for entry in entries {
             if self.interrupted() {
                 break;
@@ -540,49 +640,45 @@ impl Sync<'_> {
             if !self.filters.admits(&entry.name, &facts) {
                 continue;
             }
-            let Some(relative) =
-                self.copy_destination(folder, entry, &facts, records.get(&entry.name))
-            else {
-                continue;
+            let relative = match self.plan(folder, entry, &facts, records.get(&entry.name)) {
+                Plan::Skip => continue,
+                Plan::Adopt(relative) => {
+                    self.note(
+                        folder,
+                        &entry.name,
+                        &relative,
+                        facts.size as i64,
+                        entry.modified,
+                    )
+                    .await?;
+                    continue;
+                }
+                Plan::Copy(relative) => relative,
             };
             let (source, target) = (
                 self.origin.join(join(folder, &entry.name)),
                 self.destination.join(&relative),
             );
-            let (verify, cancel) = (self.verify, Arc::clone(self.cancel));
-            match blocking(move || copy_file(&source, &target, verify, &cancel)).await? {
+            let (verify, cancel, trash) =
+                (self.verify, Arc::clone(self.cancel), self.trash.cloned());
+            match blocking(move || copy_file(&source, &target, verify, &cancel, trash.as_ref()))
+                .await?
+            {
                 Ok(()) => {
                     self.progress.copied.fetch_add(1, Ordering::Relaxed);
-                    written.push((
-                        entry.name.clone(),
-                        relative,
+                    self.note(
+                        folder,
+                        &entry.name,
+                        &relative,
                         facts.size as i64,
                         entry.modified,
-                    ));
+                    )
+                    .await?;
                 }
                 Err(Stop::Interrupted) => break,
                 Err(Stop::Failed(error)) => self.progress.fail(error),
             }
         }
-        let mut transaction = self.db.begin().await?;
-        for (name, destination, size, modified) in written {
-            sqlx::query(
-                "INSERT INTO rule_files (rule_id, parent, name, destination, size, modified)
-                 VALUES (?, ?, ?, ?, ?, ?)
-                 ON CONFLICT (rule_id, parent, name) DO UPDATE SET
-                    destination = excluded.destination, size = excluded.size,
-                    modified = excluded.modified",
-            )
-            .bind(self.rule_id)
-            .bind(folder)
-            .bind(name)
-            .bind(destination)
-            .bind(size)
-            .bind(modified)
-            .execute(&mut *transaction)
-            .await?;
-        }
-        transaction.commit().await?;
         if self.interrupted() {
             return Err(Stop::Interrupted);
         }

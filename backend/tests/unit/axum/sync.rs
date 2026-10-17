@@ -65,6 +65,8 @@ impl Bench {
             verify: true,
             cancel: &self.cancel,
             progress,
+            trash: None,
+            removable: u64::MAX,
         }
     }
 
@@ -180,6 +182,96 @@ async fn a_mirror_removes_only_the_copies_whose_original_is_gone() {
 }
 
 #[tokio::test]
+async fn what_a_mirror_removes_or_replaces_goes_to_the_trash_of_the_disk() {
+    let bench = Bench::new().await;
+    bench.origin.write("a.txt", "first");
+    bench.origin.write("b.txt", "b");
+    assert_eq!(bench.run().await.0, Ok(()));
+    std::thread::sleep(Duration::from_millis(20));
+    bench.origin.write("a.txt", "second");
+    fs::remove_file(bench.origin.path().join("b.txt")).expect("gone");
+
+    // The destination stands for its disk.
+    let trash = Trash::new(bench.destination.path().to_path_buf());
+    let filters = Filters::default();
+    let progress = Progress::default();
+    let mut sync = bench.sync(&filters, &progress);
+    sync.trash = Some(&trash);
+    assert_eq!(sync.tree("").await, Ok(()));
+    assert_eq!(bench.copy("a.txt").as_deref(), Some("second"));
+    assert_eq!(bench.copy("b.txt"), None);
+    assert_eq!(bench.copy(".nas-trash/a.txt").as_deref(), Some("first"));
+    assert_eq!(bench.copy(".nas-trash/b.txt").as_deref(), Some("b"));
+}
+
+#[tokio::test]
+async fn an_automatic_run_stops_before_a_burst_of_removals() {
+    let bench = Bench::new().await;
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        bench.origin.write(name, name);
+    }
+    assert_eq!(bench.run().await.0, Ok(()));
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        fs::remove_file(bench.origin.path().join(name)).expect("gone");
+    }
+    let filters = Filters::default();
+    let progress = Progress::default();
+    let mut sync = bench.sync(&filters, &progress);
+    sync.removable = 2;
+    let outcome = sync.tree("").await;
+    assert!(matches!(outcome, Err(Stop::Failed(reason)) if reason.contains("more than 2 files")));
+    assert_eq!(progress.removed.load(Ordering::Relaxed), 0);
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        assert_eq!(bench.copy(name).as_deref(), Some(name));
+    }
+    // By hand there is no limit.
+    assert_eq!(bench.run().await.0, Ok(()));
+    assert_eq!(bench.copy("a.txt"), None);
+}
+
+#[tokio::test]
+async fn an_identical_file_in_the_destination_is_taken_as_its_copy() {
+    let bench = Bench::new().await;
+    let original = bench.origin.write("a.txt", "same");
+    // A copy made before a crash wrote it down: same bytes, same time.
+    let copy = bench.destination.write("a.txt", "same");
+    let time = fs::metadata(&original)
+        .expect("original")
+        .modified()
+        .expect("time");
+    File::options()
+        .write(true)
+        .open(&copy)
+        .expect("copy")
+        .set_modified(time)
+        .expect("time kept");
+    let filters = Filters::default();
+    let progress = Progress::default();
+    let mut sync = bench.sync(&filters, &progress);
+    sync.resolution = DuplicateResolution::Copy;
+    assert_eq!(sync.tree("").await, Ok(()));
+    assert_eq!(copied(&progress), 0);
+    assert!(!bench.destination.path().join("a (1).txt").exists());
+    assert_eq!(bench.records().await.len(), 1);
+}
+
+#[tokio::test]
+async fn the_folders_under_one_are_read_through_the_index() {
+    let bench = Bench::new().await;
+    bench.origin.write("a/x.txt", "x");
+    bench.origin.write("a/b/y.txt", "y");
+    bench.origin.write("ab/z.txt", "z");
+    assert_eq!(bench.run().await.0, Ok(()));
+    let filters = Filters::default();
+    let progress = Progress::default();
+    let sync = bench.sync(&filters, &progress);
+    let mut under_a = sync.parents_under("a").await.expect("parents");
+    under_a.sort();
+    assert_eq!(under_a, ["a", "a/b"]);
+    assert_eq!(sync.parents_under("").await.expect("parents").len(), 3);
+}
+
+#[tokio::test]
 async fn copying_only_never_removes_and_resolves_the_files_in_the_way() {
     let bench = Bench::new().await;
     bench.origin.write("a.txt", "new a");
@@ -269,7 +361,7 @@ async fn a_stopped_run_leaves_no_half_file() {
     let source = bench.origin.write("b.txt", "b");
     let target = bench.destination.path().join("b.txt");
     assert_eq!(
-        copy_file(&source, &target, false, &bench.cancel),
+        copy_file(&source, &target, false, &bench.cancel, None),
         Err(Stop::Interrupted)
     );
     assert!(!target.exists());
@@ -279,6 +371,7 @@ async fn a_stopped_run_leaves_no_half_file() {
         &target,
         false,
         &bench.cancel,
+        None,
     );
     assert!(matches!(missing, Err(Stop::Failed(reason)) if reason.contains("cannot be read")));
     assert_eq!(

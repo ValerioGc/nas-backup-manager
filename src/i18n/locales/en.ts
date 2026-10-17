@@ -62,6 +62,7 @@ export const en = {
     watched: 'Source folder',
     sameDestination: 'Use the source folder as destination',
     sameDestinationHint: 'The selected operations run in the source folder.',
+    sameDisk: 'Source and destination are on the same disk: if the disk fails, both are lost.',
     origin: 'Source folder',
     destination: 'Destination folder',
     cloud: 'Cloud folder',

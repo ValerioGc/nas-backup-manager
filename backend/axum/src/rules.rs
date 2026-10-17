@@ -498,7 +498,7 @@ pub async fn run_rule(
     State(state): State<AppState>,
     UrlPath(id): UrlPath<String>,
 ) -> Result<StatusCode, ApiError> {
-    Runner::start(&state.runner, &id, None).await?;
+    Runner::start(&state.runner, &id, None, true).await?;
     Ok(StatusCode::ACCEPTED)
 }
 

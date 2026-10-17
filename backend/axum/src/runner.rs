@@ -16,6 +16,7 @@ use crate::{
     scheduler,
     storage::{self, Storage},
     sync::{Progress, Stop, Sync},
+    trash::Trash,
     ApiError,
 };
 use aes_gcm::Aes256Gcm;
@@ -116,6 +117,10 @@ impl Runner {
         &self.database
     }
 
+    pub fn launcher(&self) -> &Launcher {
+        &self.launcher
+    }
+
     pub fn cipher(&self) -> &Aes256Gcm {
         &self.cipher
     }
@@ -199,6 +204,7 @@ impl Runner {
         this: &Arc<Self>,
         id: &str,
         changed: Option<Vec<String>>,
+        by_hand: bool,
     ) -> Result<tokio::task::JoinHandle<()>, ApiError> {
         let stored = rules::load(&this.database, &this.cipher, id)
             .await?
@@ -221,7 +227,7 @@ impl Runner {
         let runner = Arc::clone(this);
         Ok(tokio::spawn(async move {
             let id = stored.rule.id.clone();
-            runner.run(stored, changed, &cancel).await;
+            runner.run(stored, changed, by_hand, &cancel).await;
             if let Ok(mut active) = runner.active.lock() {
                 active.remove(&id);
             }
@@ -233,7 +239,7 @@ impl Runner {
         while this.is_running(id) {
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
-        match Self::start(this, id, changed).await {
+        match Self::start(this, id, changed, false).await {
             Ok(run) => {
                 let _ = run.await;
             }
@@ -260,6 +266,7 @@ impl Runner {
         &self,
         stored: StoredRule,
         changed: Option<Vec<String>>,
+        by_hand: bool,
         cancel: &Arc<AtomicBool>,
     ) {
         let _permit = self.permits.acquire().await;
@@ -298,7 +305,9 @@ impl Runner {
             })
         });
 
-        let outcome = self.work(&stored, changed, cancel, &progress).await;
+        let outcome = self
+            .work(&stored, changed, by_hand, cancel, &progress)
+            .await;
         if let Some(reporter) = reporter {
             reporter.abort();
         }
@@ -353,6 +362,7 @@ impl Runner {
         &self,
         stored: &StoredRule,
         changed: Option<Vec<String>>,
+        by_hand: bool,
         cancel: &Arc<AtomicBool>,
         progress: &Progress,
     ) -> Result<(), Stop> {
@@ -434,6 +444,18 @@ impl Runner {
             return Ok(());
         }
 
+        // A network disk has no trash of the NAS: there a removed copy is gone.
+        let trash = (!destination.network).then(|| Trash::new(destination.volume.clone()));
+        let removable = if by_hand {
+            u64::MAX
+        } else {
+            let copies: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM rule_files WHERE rule_id = ?")
+                    .bind(&rule.id)
+                    .fetch_one(&self.database)
+                    .await?;
+            removable(copies)
+        };
         let sync = Sync {
             db: &self.database,
             rule_id: &rule.id,
@@ -446,6 +468,8 @@ impl Runner {
             verify: rule.verify_archived_files,
             cancel,
             progress,
+            trash: trash.as_ref(),
+            removable,
         };
         sync.run_parts(rule.same_destination, changed).await
     }
@@ -485,6 +509,14 @@ impl Runner {
         }
         Ok(())
     }
+}
+
+/// The fewest copies an automatic run may always remove.
+const REMOVABLE_AT_LEAST: u64 = 100;
+
+/// How many copies an automatic run may remove: a quarter of them, at least `REMOVABLE_AT_LEAST`.
+pub fn removable(copies: i64) -> u64 {
+    (copies.max(0) as u64 / 4).max(REMOVABLE_AT_LEAST)
 }
 
 /// Where a run is, in words, for the operation of the launcher.

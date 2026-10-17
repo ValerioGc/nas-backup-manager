@@ -1,6 +1,7 @@
 mod archive;
 mod filters;
 mod launcher;
+mod launcher_only;
 mod rename;
 mod rules;
 mod runner;
@@ -9,6 +10,7 @@ mod scheduler;
 mod secrets;
 mod storage;
 mod sync;
+mod trash;
 mod watcher;
 
 use aes_gcm::Aes256Gcm;
@@ -300,7 +302,7 @@ async fn run(
         let runner = Arc::clone(&runner);
         async move { runner.declare_background().await }
     });
-    let result = axum::serve(listener, app)
+    let result = axum::serve(launcher_only::LauncherOnly::new(listener), app)
         .with_graceful_shutdown(shutdown_signal)
         .await;
     scheduler.abort();

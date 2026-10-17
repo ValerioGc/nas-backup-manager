@@ -150,3 +150,19 @@ it('shows a folder by the name of its disk, not by its id', async () => {
   vi.unstubAllGlobals();
   forgetVolumeNames();
 });
+
+it('says when source and destination are on the same disk', async () => {
+  const wrapper = mountStep('scheduled', {
+    origin: '/vol-a/Photos',
+    destination: '/vol-b/Backup',
+    cloud: null,
+  });
+  expect(wrapper.find('[data-testid="same_disk"]').exists()).toBe(false);
+  await wrapper.setProps({
+    folders: { origin: '/vol-a/Photos', destination: '/vol-a/Backup', cloud: null },
+  });
+  expect(wrapper.get('[data-testid="same_disk"]').text()).toBe(messages.en.folders.sameDisk);
+  await wrapper.setProps({ type: 'rtl', sameDestination: true });
+  expect(wrapper.find('[data-testid="same_disk"]').exists()).toBe(false);
+  wrapper.unmount();
+});

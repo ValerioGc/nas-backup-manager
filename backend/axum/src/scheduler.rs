@@ -1,8 +1,9 @@
 //! Runs the scheduled rules at their time. One loop for all of them: it asks systemd when each
 //! rule comes next (`systemd-analyze calendar`, which knows the time zone and summer time of the
 //! NAS), sleeps until the first one, at most a quarter of an hour, and wakes at once when a rule
-//! changes. A time missed while the NAS was off or asleep is skipped, and so is one that comes
-//! while the rule is still running.
+//! changes. A time missed while the NAS was off or asleep is caught up once: at the start, a rule
+//! whose first time after its last run (or its creation) has passed runs now, and the person is
+//! told; a time that comes while the rule is still running is skipped.
 
 use crate::{
     rules,
@@ -65,6 +66,25 @@ pub async fn next_elapse(expressions: &[String]) -> Option<i64> {
         .await
         .ok()?;
     parse_elapses(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// The first time of a schedule after the moment `after` (Unix milliseconds).
+pub async fn next_after(expressions: &[String], after: i64) -> Option<i64> {
+    let output = Command::new("systemd-analyze")
+        .args(["calendar", "--iterations=1"])
+        .arg(format!("--base-time=@{}", after.div_euclid(1000)))
+        .args(expressions)
+        .output()
+        .await
+        .ok()?;
+    parse_elapses(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// When a rule was made, from the text the page writes (`2026-10-17T10:00:00.000Z`).
+pub fn created_at_ms(created_at: &str) -> Option<i64> {
+    let (date, time) = created_at.split_once('T')?;
+    let time = time.trim_end_matches('Z').split('.').next()?;
+    utc_milliseconds(date, time)
 }
 
 /// The earliest `(in UTC): Wed 2026-10-14 01:00:00 UTC` of an answer of systemd-analyze. On a
@@ -147,6 +167,63 @@ async fn upcoming(runner: &Runner) -> Vec<(i64, String)> {
     upcoming
 }
 
+/// Runs a rule whose time passed while the NAS was off or asleep, and tells the person.
+async fn start_late(runner: &Arc<Runner>, id: &str) {
+    match Runner::start(runner, id, None, false).await {
+        Ok(_) => {
+            let name = rules::load(runner.database(), runner.cipher(), id)
+                .await
+                .ok()
+                .flatten()
+                .map(|stored| stored.rule.name)
+                .unwrap_or_else(|| id.to_owned());
+            runner
+                .launcher()
+                .notify(
+                    "Backup eseguito in ritardo",
+                    &format!(
+                        "Il backup {name} non è partito all'orario previsto perché il NAS era \
+                         spento o in sospensione: è stato eseguito ora."
+                    ),
+                    "warning",
+                )
+                .await;
+        }
+        Err(error) => eprintln!("<4>the late run of {id} did not start: {}", error.message),
+    }
+}
+
+/// At the start: the scheduled rules whose first time after their last run (or their creation)
+/// has passed run now, once.
+async fn catch_up(runner: &Arc<Runner>, now: i64) {
+    let Ok(rules) = rules::load_all(runner.database(), runner.cipher()).await else {
+        return;
+    };
+    for (stored, last) in rules {
+        let rule = &stored.rule;
+        let Some(schedule) = rule
+            .schedule
+            .as_ref()
+            .filter(|_| rule.enabled && rule.rule_type == "scheduled")
+        else {
+            continue;
+        };
+        let Some(since) = last
+            .as_ref()
+            .map(|last| last.at)
+            .or_else(|| created_at_ms(&rule.created_at))
+        else {
+            continue;
+        };
+        if next_after(&calendar(schedule), since)
+            .await
+            .is_some_and(|due| due + LATE_MS < now)
+        {
+            start_late(runner, &rule.id).await;
+        }
+    }
+}
+
 async fn start_due(runner: &Arc<Runner>, upcoming: Vec<(i64, String)>, now: i64) {
     for (at, id) in upcoming {
         if at > now {
@@ -155,10 +232,11 @@ async fn start_due(runner: &Arc<Runner>, upcoming: Vec<(i64, String)>, now: i64)
         // Read again from now on: the next time is strictly after this one.
         runner.set_next(&id, None);
         if now - at > LATE_MS {
-            eprintln!("<4>the run of {id} at {at} was missed: the NAS was not awake");
+            eprintln!("<4>the run of {id} at {at} was missed: the NAS was not awake; it runs now");
+            start_late(runner, &id).await;
             continue;
         }
-        if let Err(error) = Runner::start(runner, &id, None).await {
+        if let Err(error) = Runner::start(runner, &id, None, false).await {
             eprintln!(
                 "<4>the scheduled run of {id} did not start: {}",
                 error.message
@@ -168,6 +246,7 @@ async fn start_due(runner: &Arc<Runner>, upcoming: Vec<(i64, String)>, now: i64)
 }
 
 pub async fn run(runner: Arc<Runner>) {
+    catch_up(&runner, crate::runner::now_ms()).await;
     loop {
         let upcoming = upcoming(&runner).await;
         let now = crate::runner::now_ms();

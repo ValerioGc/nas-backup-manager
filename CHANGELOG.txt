@@ -2,6 +2,34 @@
 
 All notable changes to nas-backup-manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- Each copy is written down as soon as it is in place, and a file of the destination identical to
+  its original (size and time) is taken as its copy: a run stopped by a crash no longer makes `file
+  (1)` duplicates nor stops updating a file. The folder is written to disk after each rename, so a
+  copy lasts through a power cut.
+
+### Changed
+
+- What a run removes or replaces in the destination goes to the trash of its disk, a version already
+  there kept beside it, numbered; while the trash is off, or on a network disk, it is removed as
+  before.
+- A scheduled or real-time run that would remove more than a quarter of the copies of a rule (at
+  least 100) stops before removing any more and fails; a run started by hand removes them.
+- A scheduled time missed while the NAS was off or asleep runs once at the start of the app or when
+  the NAS wakes, with the notification "Backup eseguito in ritardo", instead of being skipped.
+- The rule form says when source and destination are on the same disk.
+- Real-time runs read the folders under a change through the index of the copies instead of the
+  whole list.
+
+### Security
+
+- The socket of the app answers the launcher only (root, the owner of the folder of the sockets, or
+  the app itself): another app of the NAS can no longer reach its API with headers it made up
+  (`launcher_only.rs`).
+
 ## [0.1.17]
 
 ### Changed

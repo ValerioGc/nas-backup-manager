@@ -93,6 +93,25 @@ impl Launcher {
         }
     }
 
+    /// A notification under the name of this application.
+    pub async fn notify(&self, title: &str, message: &str, tone: &str) {
+        if self.socket.is_none() {
+            return;
+        }
+        let notification = json!({
+            "title": title,
+            "message": message,
+            "source": ID,
+            "tone": tone,
+        });
+        if let Err(reason) = self
+            .request("POST", "/api/notifications", Some(&notification))
+            .await
+        {
+            eprintln!("<4>the notification was not sent: {reason}");
+        }
+    }
+
     /// Registers the operation of a run, which only stopping can interrupt.
     pub async fn start_task(&self, id: &str, name: &str) -> bool {
         let task = json!({

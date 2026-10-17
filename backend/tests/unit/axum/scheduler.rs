@@ -81,3 +81,25 @@ async fn asks_systemd_when_a_schedule_comes_next() {
     assert!(next > now && next - now <= 24 * 3600 * 1000 + 3600 * 1000);
     assert_eq!(next_elapse(&["not a calendar".to_owned()]).await, None);
 }
+
+#[test]
+fn reads_when_a_rule_was_made_from_the_text_of_the_page() {
+    assert_eq!(
+        created_at_ms("2026-10-17T10:00:00.000Z"),
+        utc_milliseconds("2026-10-17", "10:00:00")
+    );
+    assert_eq!(
+        created_at_ms("2026-10-17T10:00:00Z"),
+        utc_milliseconds("2026-10-17", "10:00:00")
+    );
+    assert_eq!(created_at_ms("x"), None);
+}
+
+#[tokio::test]
+async fn finds_the_first_time_after_a_moment() {
+    let after = utc_milliseconds("2026-10-14", "12:00:00").unwrap();
+    // Without systemd-analyze, as in some containers, there is no answer to check.
+    if let Some(next) = next_after(&["*-*-* 00:00:00 UTC".to_owned()], after).await {
+        assert_eq!(next, utc_milliseconds("2026-10-15", "00:00:00").unwrap());
+    }
+}

@@ -37,6 +37,13 @@ const folderFields = computed(() =>
   })),
 );
 
+/** Origin and destination on one disk: if that disk breaks, the backup goes with it. */
+const sameDisk = computed(() => {
+  const disk = (path: string | null) => path?.split('/').find(Boolean) ?? null;
+  const origin = disk(folders.value.origin);
+  return !sameDestination.value && origin !== null && origin === disk(folders.value.destination);
+});
+
 /** The folder as the person knows it: the name of its disk, not its id, and the path in it. */
 function shown(kind: FolderKind) {
   const path = folders.value[kind];
@@ -131,6 +138,10 @@ async function pick(kind: FolderKind) {
       </template>
     </div>
 
+    <p v-if="sameDisk" class="alert_warning" role="note" data-testid="same_disk">
+      {{ t.folders.sameDisk }}
+    </p>
+
     <div v-if="type === 'rtl'" class="same_destination">
       <NasSwitch
         v-model="sameDestination"
@@ -148,6 +159,16 @@ async function pick(kind: FolderKind) {
   display: grid;
   gap: 20px;
   min-width: 0;
+}
+
+.alert_warning {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--tone-warning) 35%, var(--nas-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tone-warning) 8%, var(--nas-surface));
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .folder_title {

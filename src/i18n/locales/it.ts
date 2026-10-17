@@ -62,6 +62,8 @@ export const it = {
     watched: 'Cartella origine',
     sameDestination: 'Usa la cartella di origine come destinazione',
     sameDestinationHint: 'Le operazioni selezionate vengono eseguite nella cartella origine.',
+    sameDisk:
+      'Origine e destinazione sono sullo stesso disco: se il disco si guasta, si perdono entrambe.',
     origin: 'Cartella origine',
     destination: 'Cartella destinazione',
     cloud: 'Cartella cloud',
