@@ -200,6 +200,40 @@ pub fn free_name(folder: &Path, name: &str) -> String {
         .unwrap_or_else(|| name.to_owned())
 }
 
+/// Writes the original into a temporary file, keeping its permissions and time.
+fn write_temporary(source: &Path, temporary: &Path, cancel: &AtomicBool) -> Result<(), Stop> {
+    let failed = |what: &str, error: io::Error| {
+        Stop::Failed(format!("{} {what}: {error}", source.display()))
+    };
+    let mut input = File::open(source).map_err(|error| failed("cannot be read", error))?;
+    let metadata = input
+        .metadata()
+        .map_err(|error| failed("cannot be read", error))?;
+    let mut output = File::create(temporary).map_err(|error| failed("cannot be written", error))?;
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(Stop::Interrupted);
+        }
+        let copied = io::copy(&mut (&mut input).take(CHUNK), &mut output)
+            .map_err(|error| failed("cannot be copied", error))?;
+        if copied < CHUNK {
+            break;
+        }
+    }
+    output
+        .set_permissions(metadata.permissions())
+        .map_err(|error| failed("cannot keep its permissions", error))?;
+    if let Ok(modified) = metadata.modified() {
+        output
+            .set_modified(modified)
+            .map_err(|error| failed("cannot keep its time", error))?;
+    }
+    output
+        .sync_all()
+        .map_err(|error| failed("cannot be written", error))?;
+    Ok(())
+}
+
 /// Copies a file into place: a temporary file beside the target, the time and the permissions
 /// of the original, a comparison when asked, then a rename over the target.
 pub fn copy_file(
@@ -222,33 +256,7 @@ pub fn copy_file(
         nanoseconds(Some(SystemTime::now()))
     ));
     let outcome = (|| {
-        let mut input = File::open(source).map_err(|error| failed("cannot be read", error))?;
-        let metadata = input
-            .metadata()
-            .map_err(|error| failed("cannot be read", error))?;
-        let mut output =
-            File::create(&temporary).map_err(|error| failed("cannot be written", error))?;
-        loop {
-            if cancel.load(Ordering::Relaxed) {
-                return Err(Stop::Interrupted);
-            }
-            let copied = io::copy(&mut (&mut input).take(CHUNK), &mut output)
-                .map_err(|error| failed("cannot be copied", error))?;
-            if copied < CHUNK {
-                break;
-            }
-        }
-        output
-            .set_permissions(metadata.permissions())
-            .map_err(|error| failed("cannot keep its permissions", error))?;
-        if let Ok(modified) = metadata.modified() {
-            output
-                .set_modified(modified)
-                .map_err(|error| failed("cannot keep its time", error))?;
-        }
-        output
-            .sync_all()
-            .map_err(|error| failed("cannot be written", error))?;
+        write_temporary(source, &temporary, cancel)?;
         if verify && !same_bytes(source, &temporary, cancel)? {
             return Err(Stop::Failed(format!(
                 "{} differs from its copy",
