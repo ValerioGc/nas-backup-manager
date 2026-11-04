@@ -1,0 +1,3 @@
+#!/bin/sh
+echo 'disk full' >&2
+exit 2

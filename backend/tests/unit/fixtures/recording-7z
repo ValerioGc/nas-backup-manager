@@ -1,0 +1,7 @@
+#!/bin/sh
+if [ "$1" = a ]; then eval "archive=\${$(($# - 1))}"; else eval "archive=\${$#}"; fi
+calls="$(dirname "$archive")/.calls"
+echo "args: $*" >>"$calls"
+cat >>"$calls"
+if [ "$1" = a ]; then : >"$archive"; fi
+exit 0
