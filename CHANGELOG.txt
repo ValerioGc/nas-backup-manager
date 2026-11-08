@@ -2,6 +2,12 @@
 
 All notable changes to nas-backup-manager are documented in this file.
 
+## [0.9.1]
+
+### Changed
+
+- Replace network disk functionality with cloud disk management.
+
 ## [0.9.0]
 
 - Initial release of nas-backup-manager.
