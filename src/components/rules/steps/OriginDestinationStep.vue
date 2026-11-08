@@ -6,7 +6,7 @@ import { requiredFolders } from '@/services/backupRules';
 import { pickNasFolder } from '@/services/nasShell';
 import { readableFolder } from '@/services/volumes';
 import { useVolumeNames } from '@/composables/useVolumeNames';
-import NetworkDiskPicker from '@/components/cloud/NetworkDiskPicker.vue';
+import CloudDiskNotice from '@/components/cloud/CloudDiskNotice.vue';
 import { NasSwitch } from '@valeriogc/nas-base-app';
 import type { FolderKind, RuleFolders, SectionCode } from '@/types/backup';
 import arrowRight from '@/assets/icons/arrow-right.svg?url';
@@ -93,11 +93,7 @@ async function pick(kind: FolderKind) {
             <img class="app_icon" :src="folderIcon" alt="" aria-hidden="true" />
             <h4>{{ field.label }}</h4>
           </header>
-          <NetworkDiskPicker
-            v-if="field.kind === 'cloud'"
-            :model-value="folders.cloud"
-            @update:model-value="setFolder('cloud', $event)"
-          />
+          <CloudDiskNotice v-if="field.kind === 'cloud'" />
           <template v-else>
             <div class="folder_selection">
               <p

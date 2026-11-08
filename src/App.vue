@@ -1,16 +1,15 @@
 <script setup lang="ts">
 
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { NasAppLayout, NasConfirmDialog, type NasCategory } from '@valeriogc/nas-base-app';
 import { useBackupRules } from '@/composables/useBackupRules';
 import { useNasLauncherContext } from '@/composables/useNasLauncherContext';
-import { useNetworkDisks } from '@/composables/useNetworkDisks';
 import { saveBackupRule } from '@/services/backupRules';
 import { errorMessage } from '@/services/errors';
 import type { BackupRule, ListedRule, SectionCode } from '@/types/backup';
 
 import LoadError from '@/components/common/LoadError.vue';
-import NetworkDiskNotice from '@/components/cloud/NetworkDiskNotice.vue';
+import CloudDiskNotice from '@/components/cloud/CloudDiskNotice.vue';
 import CommonRuleView from '@/components/rules/CommonRuleView.vue';
 import RuleList from '@/components/rules/RuleList.vue';
 import cloudIcon from '@/assets/icons/cloud.svg?url';
@@ -20,8 +19,6 @@ import scheduledIcon from '@/assets/icons/scheduled.svg?url';
 const { t } = useNasLauncherContext();
 const { bySection, loading, loadError, acting, actionError, load, runOrStop, setEnabled, remove } =
   useBackupRules();
-
-const networkDisks = useNetworkDisks();
 
 const sectionIcons: Record<SectionCode, string> = {
   scheduled: scheduledIcon,
@@ -47,24 +44,6 @@ const saveError = ref<string | null>(null);
 const pendingLeave = ref<{ section: SectionCode | null } | null>(null);
 
 const inCloud = computed(() => sectionCode.value === 'cloud');
-
-const disksMissing = computed(
-  () =>
-    inCloud.value &&
-    networkDisks.loaded.value &&
-    !networkDisks.loading.value &&
-    networkDisks.disks.value.length === 0,
-);
-
-const canAddRule = computed(
-  () => !inCloud.value || (networkDisks.loaded.value && networkDisks.disks.value.length > 0),
-);
-
-watch([sectionCode, formOpen], ([section, open]) => {
-  if (section === 'cloud' && !open) {
-    void networkDisks.load();
-  }
-});
 
 function openRule(rule: ListedRule | null) {
   editing.value = rule;
@@ -174,15 +153,15 @@ async function saveRule(rule: BackupRule) {
       :acting="acting"
       :action-error="actionError"
       :empty-icon="sectionIcons[sectionCode]"
-      :can-add="canAddRule"
+      :can-add="!inCloud"
       @add="openRule(null)"
       @edit="openRule"
       @run="runOrStop"
       @switch="setEnabled"
       @delete="remove"
     >
-      <template v-if="disksMissing" #notice>
-        <NetworkDiskNotice :failed="networkDisks.failed.value" @retry="networkDisks.load()" />
+      <template v-if="inCloud" #notice>
+        <CloudDiskNotice />
       </template>
     </RuleList>
   </NasAppLayout>

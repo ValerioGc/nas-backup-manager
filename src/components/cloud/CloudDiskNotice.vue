@@ -4,41 +4,27 @@ import { useI18n } from '@/i18n';
 import { openNasApp } from '@/services/nasShell';
 import cloudIcon from '@/assets/icons/cloud.svg?url';
 
-defineProps<{ failed?: boolean }>();
-
-const emit = defineEmits<{ retry: [] }>();
-
 const { t } = useI18n();
 
-function openNetworkDisks() {
-  openNasApp('nas-disk-manager', '?kind=network');
+function openCloudDisks() {
+  openNasApp('nas-disk-manager', '?kind=cloud');
 }
 
 </script>
 
 <template>
-  <div v-if="failed" class="app_error alert_error disks_failed" role="alert">
-    <span>{{ t.networkDisks.loadError }}</span>
-    <button
-      type="button"
-      class="app_button app_button--small"
-      data-testid="network_disks_retry"
-      @click="emit('retry')"
-    >
-      {{ t.retry }}
-    </button>
-  </div>
-  <aside v-else class="network_notice" data-testid="network_disk_notice">
+  <aside class="cloud_notice" data-testid="cloud_disk_notice">
     <img class="app_icon notice_icon" :src="cloudIcon" alt="" aria-hidden="true" />
     <div class="notice_text">
-      <strong>{{ t.networkDisks.noneTitle }}</strong>
-      <p>{{ t.networkDisks.noneDescription }}</p>
+      <strong>{{ t.cloudDisks.noneTitle }}</strong>
+      <p>{{ t.cloudDisks.noneDescription }}</p>
       <button
         type="button"
         class="app_button app_button--primary app_button--small"
-        @click="openNetworkDisks"
+        data-testid="cloud_disks_open"
+        @click="openCloudDisks"
       >
-        {{ t.networkDisks.open }}
+        {{ t.cloudDisks.open }}
       </button>
     </div>
   </aside>
@@ -46,15 +32,7 @@ function openNetworkDisks() {
 
 <style scoped lang="scss">
 
-.disks_failed {
-  align-items: center;
-
-  span {
-    flex: 1;
-  }
-}
-
-.network_notice {
+.cloud_notice {
   display: flex;
   align-items: flex-start;
   gap: 16px;

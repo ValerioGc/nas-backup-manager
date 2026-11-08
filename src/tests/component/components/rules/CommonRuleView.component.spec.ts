@@ -25,7 +25,7 @@ vi.mock('@/services/backupRules', async (importOriginal) => ({
 vi.mock('@/services/nasShell', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/nasShell')>()),
   pickNasFolder: vi.fn(),
-  requestNetworkDisks: vi.fn(),
+  openNasApp: vi.fn(),
   requestPowerSchedule: vi.fn(),
 }));
 
@@ -57,7 +57,7 @@ it.each<[SectionCode, string, number]>([
 
 it('keeps filters across steps and saves them with the selected section', async () => {
   setLocale('en');
-  const wrapper = mount(CommonRuleView, { props: { section: 'cloud' } });
+  const wrapper = mount(CommonRuleView, { props: { section: 'scheduled' } });
   const footerButton = (label: string) =>
     wrapper.findAll('footer button').find((button) => button.text() === label)!;
 
@@ -75,9 +75,9 @@ it('keeps filters across steps and saves them with the selected section', async 
   await footerButton('Save').trigger('click');
 
   expect(wrapper.emitted('save')?.[0]?.[0]).toMatchObject({
-    type: 'cloud',
+    type: 'scheduled',
     id: expect.any(String),
-    folders: { origin: null, destination: null, cloud: '/mnt/office' },
+    folders: { origin: '/Folder 1', destination: '/Folder 2', cloud: null },
     schedule: { frequency: 'daily', time: '02:00', weekday: null, day: null, month: null },
     name: 'Rule',
     filters: [
@@ -92,6 +92,16 @@ it('keeps filters across steps and saves them with the selected section', async 
     ],
     createdAt: expect.any(String),
   });
+});
+
+it('keeps a cloud rule on its first step while there is no cloud disk', async () => {
+  setLocale('en');
+  const wrapper = mount(CommonRuleView, { props: { section: 'cloud' } });
+  await chooseFolders(wrapper);
+
+  expect(wrapper.find('[data-testid="cloud_disk_notice"]').exists()).toBe(true);
+  const next = wrapper.findAll('footer button').find((button) => button.text() === 'Next')!;
+  expect(next.attributes('disabled')).toBeDefined();
 });
 
 it('goes past the folders only once they are chosen and saves them with the rule', async () => {
@@ -213,11 +223,11 @@ it('saves the rule under the section where it was created', async () => {
   setLocale('en');
   const wrapper = mount(App);
   await flushPromises();
-  const cloudSection = wrapper
+  const realTimeSection = wrapper
     .findAll('nav button')
-    .find((button) => button.text() === messages.en.sections.cloud)!;
+    .find((button) => button.text() === messages.en.sections.rtl)!;
 
-  await cloudSection.trigger('click');
+  await realTimeSection.trigger('click');
   await wrapper
     .findAll('button')
     .find((button) => button.text() === messages.en.add)!
@@ -227,21 +237,14 @@ it('saves the rule under the section where it was created', async () => {
     wrapper.findAll('footer button').find((button) => button.text() === label)!;
   await chooseFolders(wrapper);
   await footerButton('Next').trigger('click');
-  await chooseSchedule(wrapper);
-  await footerButton('Next').trigger('click');
-  await wrapper.findAll('section button').at(-1)!.trigger('click');
   await footerButton('Next').trigger('click');
   await footerButton('Next').trigger('click');
   await footerButton('Save').trigger('click');
 
   await flushPromises();
-  expect(wrapper.get('h1').text()).toBe(messages.en.sections.cloud);
-  const cells = wrapper.findAll('tbody tr td').map((cell) => cell.text());
-  expect(cells[0]).toBe('Rule');
-  expect(cells[1]).toBe('Daily · 02:00');
-  expect(cells[4]).toBe('-');
-  expect(wrapper.find('[data-testid="run_status_never"]').exists()).toBe(true);
-  expect(wrapper.find('[data-testid^="rule_run_"]').exists()).toBe(false);
+  expect(saved.at(-1)).toMatchObject({ type: 'rtl' });
+  expect(wrapper.get('h1').text()).toBe(messages.en.sections.rtl);
+  expect(wrapper.findAll('tbody tr td').map((cell) => cell.text())[0]).toBe('Rule');
 });
 
 it('goes past the schedule only at a time the NAS is on', async () => {

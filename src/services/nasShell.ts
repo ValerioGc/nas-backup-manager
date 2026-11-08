@@ -1,5 +1,5 @@
 import { createNasShell } from '@valeriogc/nas-base-app';
-import type { NetworkDisk, PickedFile, PowerSchedule } from '@valeriogc/nas-base-app';
+import type { PickedFile, PowerSchedule } from '@valeriogc/nas-base-app';
 import { errorMessage } from '@/services/errors';
 
 /** Launcher bridge. The wrappers below resolve with the result or the error and never reject. */
@@ -20,15 +20,6 @@ export async function pickNasFolder(
     return await shell.pickFolder(directory, NO_TIMEOUT);
   } catch (error) {
     return { files: [], cancelled: false, error: errorMessage(error, String(error)) };
-  }
-}
-
-/** Network shares read by the launcher from their provider, which it starts when stopped. */
-export async function requestNetworkDisks(): Promise<{ disks: NetworkDisk[]; error?: string }> {
-  try {
-    return { disks: await shell.requestNetworkDisks() };
-  } catch (error) {
-    return { disks: [], error: errorMessage(error, String(error)) };
   }
 }
 

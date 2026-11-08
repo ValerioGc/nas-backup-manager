@@ -75,15 +75,11 @@ export const en = {
     change: 'Change',
     pickerError: 'Unable to open the folder picker.',
   },
-  networkDisks: {
-    label: 'Available network disks',
-    loading: 'Loading network disks',
-    loadError: 'Unable to read the network disks.',
-    readOnly: 'Read only',
-    noneTitle: 'No network disk configured',
+  cloudDisks: {
+    noneTitle: 'No cloud disk configured',
     noneDescription:
-      'Cloud backups are saved on a network disk, configured in the Network disks section of the Disks app.',
-    open: 'Open Network disks',
+      'Cloud backups are saved on a cloud disk, configured in the Cloud disks section of the Disks app.',
+    open: 'Open Cloud disks',
   },
   destinationOptions: {
     syncTitle: 'Mode',

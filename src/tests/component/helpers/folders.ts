@@ -1,13 +1,6 @@
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import { vi } from 'vitest';
-import { pickNasFolder, requestNetworkDisks } from '@/services/nasShell';
-
-export const networkShare = {
-  name: 'office',
-  mount: '/mnt/office',
-  source: '//nas/office',
-  readOnly: false,
-};
+import { pickNasFolder } from '@/services/nasShell';
 
 export function answerPickers() {
   let picked = 0;
@@ -15,7 +8,6 @@ export function answerPickers() {
     picked += 1;
     return { files: [{ name: `Folder ${picked}`, path: `/Folder ${picked}` }], cancelled: false };
   });
-  vi.mocked(requestNetworkDisks).mockResolvedValue({ disks: [networkShare] });
 }
 
 export async function chooseFolders(wrapper: VueWrapper, name = 'Rule') {
@@ -27,9 +19,5 @@ export async function chooseFolders(wrapper: VueWrapper, name = 'Rule') {
   for (const button of wrapper.findAll('.folder_card button')) {
     await button.trigger('click');
     await flushPromises();
-  }
-  const share = wrapper.find('input[name="network-disk"]');
-  if (share.exists()) {
-    await share.setValue(true);
   }
 }

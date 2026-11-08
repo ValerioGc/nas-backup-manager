@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import OriginDestinationStep from '@/components/rules/steps/OriginDestinationStep.vue';
 import { messages, setLocale } from '@/i18n';
-import { pickNasFolder, requestNetworkDisks } from '@/services/nasShell';
+import { openNasApp, pickNasFolder } from '@/services/nasShell';
 import type { RuleFolders, SectionCode } from '@/types/backup';
 import { answerPickers } from '../../helpers/folders';
 import { forgetVolumeNames } from '@/composables/useVolumeNames';
@@ -10,7 +10,7 @@ import { forgetVolumeNames } from '@/composables/useVolumeNames';
 vi.mock('@/services/nasShell', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/nasShell')>()),
   pickNasFolder: vi.fn(),
-  requestNetworkDisks: vi.fn(),
+  openNasApp: vi.fn(),
 }));
 
 const empty: RuleFolders = { origin: null, destination: null, cloud: null };
@@ -102,29 +102,18 @@ it('keeps the folder when the picker is cancelled and says when it cannot open',
   expect(wrapper.get('.folder_path').text()).toBe('/Backup');
 });
 
-it('lets the cloud backups choose only among the network disks', async () => {
-  vi.mocked(requestNetworkDisks).mockResolvedValue({
-    disks: [
-      { name: 'office', mount: '/mnt/office', source: '//nas/office', readOnly: false },
-      { name: 'archive', mount: '/mnt/archive', source: null, readOnly: true },
-    ],
-  });
+it('sends the cloud backups to the cloud disks of the disk manager', async () => {
   const wrapper = mountStep('cloud');
-  expect(wrapper.get('output').text()).toBe(messages.en.networkDisks.loading);
-  await flushPromises();
 
-  expect(wrapper.find('.folder_card button').exists()).toBe(false);
-  const options = wrapper.findAll('input[name="network-disk"]');
-  expect(options.map((option) => option.attributes('disabled') !== undefined)).toEqual([
+  expect(wrapper.find('.folder_card button:not([data-testid="cloud_disks_open"])').exists()).toBe(
     false,
-    true,
-  ]);
-  expect(wrapper.text()).toContain('//nas/office');
-  expect(wrapper.text()).toContain('/mnt/archive');
-  expect(wrapper.text()).toContain(messages.en.networkDisks.readOnly);
-
-  await options[0]!.setValue(true);
-  expect(wrapper.emitted('update:folders')?.at(-1)).toEqual([{ ...empty, cloud: '/mnt/office' }]);
+  );
+  expect(wrapper.get('[data-testid="cloud_disk_notice"]').text()).toContain(
+    messages.en.cloudDisks.noneTitle,
+  );
+  await wrapper.get('[data-testid="cloud_disks_open"]').trigger('click');
+  expect(openNasApp).toHaveBeenCalledWith('nas-disk-manager', '?kind=cloud');
+  expect(pickNasFolder).not.toHaveBeenCalled();
 });
 
 it('shows a folder by the name of its disk, not by its id', async () => {

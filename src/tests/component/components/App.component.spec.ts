@@ -13,9 +13,9 @@ import {
   stopBackupRule,
   switchBackupRule,
 } from '@/services/backupRules';
-import { requestNetworkDisks } from '@/services/nasShell';
+import { openNasApp } from '@/services/nasShell';
 import type { ListedRule, SectionCode } from '@/types/backup';
-import { answerPickers, chooseFolders, networkShare } from '@/tests/component/helpers/folders';
+import { answerPickers, chooseFolders } from '@/tests/component/helpers/folders';
 import { answerPowerSchedule, chooseSchedule } from '@/tests/component/helpers/schedule';
 
 const icons: Record<SectionCode, string> = {
@@ -37,7 +37,7 @@ vi.mock('@/services/backupRules', async (importOriginal) => ({
 vi.mock('@/services/nasShell', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/nasShell')>()),
   pickNasFolder: vi.fn(),
-  requestNetworkDisks: vi.fn(),
+  openNasApp: vi.fn(),
   requestPowerSchedule: vi.fn(),
 }));
 
@@ -162,7 +162,7 @@ it('confirms discarding edits when closing the rule wizard with its close button
   expect(wrapper.get('h1').text()).toBe(messages.en.sections.scheduled);
 });
 
-it.each<SectionCode>(['scheduled', 'cloud', 'rtl'])(
+it.each<SectionCode>(['scheduled', 'rtl'])(
   'opens and closes the %s configuration',
   async (section) => {
     wrapper = mount(App);
@@ -184,49 +184,22 @@ it.each<SectionCode>(['scheduled', 'cloud', 'rtl'])(
   },
 );
 
-it('points the Cloud page to the disk manager while no network disk is configured', async () => {
-  vi.mocked(requestNetworkDisks).mockResolvedValue({ disks: [] });
+it('points the Cloud page to the cloud disks of the disk manager', async () => {
   wrapper = mount(App);
   await flushPromises();
-  expect(requestNetworkDisks).not.toHaveBeenCalled();
   const section = (name: SectionCode) =>
     wrapper!.findAll('nav button').find((item) => item.text() === messages.en.sections[name])!;
 
   await section('cloud').trigger('click');
-  await flushPromises();
-  expect(wrapper.get('[data-testid="network_disk_notice"]').text()).toContain(
-    messages.en.networkDisks.noneTitle,
+  expect(wrapper.get('[data-testid="cloud_disk_notice"]').text()).toContain(
+    messages.en.cloudDisks.noneTitle,
   );
   expect(wrapper.find('[data-testid="rule_add"]').exists()).toBe(false);
+  await wrapper.get('[data-testid="cloud_disks_open"]').trigger('click');
+  expect(openNasApp).toHaveBeenCalledWith('nas-disk-manager', '?kind=cloud');
 
   await section('scheduled').trigger('click');
-  expect(wrapper.find('[data-testid="network_disk_notice"]').exists()).toBe(false);
-  expect(wrapper.find('[data-testid="rule_add"]').exists()).toBe(true);
-
-  vi.mocked(requestNetworkDisks).mockResolvedValue({ disks: [networkShare] });
-  await section('cloud').trigger('click');
-  await flushPromises();
-  expect(wrapper.find('[data-testid="network_disk_notice"]').exists()).toBe(false);
-  expect(wrapper.find('[data-testid="rule_add"]').exists()).toBe(true);
-});
-
-it('says when the network disks cannot be read, and reads them again on request', async () => {
-  vi.mocked(requestNetworkDisks).mockResolvedValue({ disks: [], error: 'Launcher unavailable' });
-  wrapper = mount(App);
-  await flushPromises();
-  const cloud = wrapper
-    .findAll('nav button')
-    .find((item) => item.text() === messages.en.sections.cloud)!;
-  await cloud.trigger('click');
-  await flushPromises();
-  expect(wrapper.find('[data-testid="network_disk_notice"]').exists()).toBe(false);
-  expect(wrapper.find('[data-testid="rule_add"]').exists()).toBe(false);
-  expect(wrapper.get('[role="alert"]').text()).toContain(messages.en.networkDisks.loadError);
-
-  vi.mocked(requestNetworkDisks).mockResolvedValue({ disks: [networkShare] });
-  await wrapper.get('[data-testid="network_disks_retry"]').trigger('click');
-  await flushPromises();
-  expect(wrapper.find('[data-testid="network_disks_retry"]').exists()).toBe(false);
+  expect(wrapper.find('[data-testid="cloud_disk_notice"]').exists()).toBe(false);
   expect(wrapper.find('[data-testid="rule_add"]').exists()).toBe(true);
 });
 

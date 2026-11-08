@@ -51,6 +51,18 @@ test('opens the nas-backup-manager interface', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Cloud', exact: true })).toBeVisible();
 });
 
+test('the Cloud page points to the cloud disks and adds no rule without one', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Cloud', exact: true }).click();
+
+  const notice = page.getByTestId('cloud_disk_notice');
+  await expect(notice).toContainText('Nessun disco cloud configurato');
+  await expect(notice).toContainText('Dischi cloud');
+  await expect(notice).not.toContainText('rete');
+  await expect(page.getByTestId('cloud_disks_open')).toHaveText('Apri Dischi cloud');
+  await expect(page.getByTestId('rule_add')).toHaveCount(0);
+});
+
 test('runs a rule from its row and shows how it went', async ({ page }) => {
   seed('run', { 'report.pdf': 'report', 'sub/photo.jpg': 'photo', 'draft.tmp': 'draft' });
   const created = await page.request.post('/api/rules', { data: rule('run', 'Documents') });

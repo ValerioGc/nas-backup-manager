@@ -76,15 +76,11 @@ export const it = {
     change: 'Cambia',
     pickerError: 'Impossibile aprire il selettore delle cartelle.',
   },
-  networkDisks: {
-    label: 'Dischi di rete disponibili',
-    loading: 'Caricamento dei dischi di rete in corso',
-    loadError: 'Impossibile leggere i dischi di rete.',
-    readOnly: 'Sola lettura',
-    noneTitle: 'Nessun disco di rete configurato',
+  cloudDisks: {
+    noneTitle: 'Nessun disco cloud configurato',
     noneDescription:
-      'I backup cloud vengono salvati su un disco di rete, configurabile nella sezione Dischi di rete dell’app Dischi.',
-    open: 'Apri Dischi di rete',
+      'I backup cloud vengono salvati su un disco cloud, configurabile nella sezione Dischi cloud dell’app Dischi.',
+    open: 'Apri Dischi cloud',
   },
   destinationOptions: {
     syncTitle: 'Modalità',
