@@ -2,6 +2,12 @@
 
 All notable changes to nas-backup-manager are documented in this file.
 
+## [0.9.2]
+
+### Changed
+
+- Update dependency management and improve documentation clarity.
+
 ## [0.9.1]
 
 ### Changed
