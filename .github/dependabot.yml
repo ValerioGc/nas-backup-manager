@@ -1,4 +1,5 @@
-# Dependency updates of a NAS application.
+# Dependency updates of a NAS application, grouped and monthly so the pull requests stay few
+# enough to be reviewed.
 version: 2
 
 updates:
@@ -13,7 +14,7 @@ updates:
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-patch']
-      # waiting vue-tsc to support TypeScript 7
+      # Hold TypeScript until vue-tsc supports TypeScript 7.
       - dependency-name: typescript
         update-types: ['version-update:semver-major', 'version-update:semver-minor']
 
@@ -29,6 +30,7 @@ updates:
       - dependency-name: '*'
         update-types: ['version-update:semver-patch']
 
+  # Actions run with the workflow token, so they are updated as well.
   - package-ecosystem: github-actions
     directory: /
     schedule:

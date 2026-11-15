@@ -124,10 +124,9 @@ watch(
   },
 );
 
-watch(form, () => emit('dirty-change', JSON.stringify(form.value) !== saved), {
-  deep: true,
-  immediate: true,
-});
+// The parent hears only when the rule starts or stops differing from the saved one.
+const dirty = computed(() => JSON.stringify(form.value) !== saved);
+watch(dirty, (isDirty) => emit('dirty-change', isDirty), { immediate: true });
 
 function previous() {
   if (!props.saving && currentStep.value > 1) {

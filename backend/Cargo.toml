@@ -5,6 +5,7 @@ edition = "2021"
 autotests = false
 
 [dependencies]
+nas-app-core = { git = "https://github.com/ValerioGc/nas-app-core", tag = "v0.1.0" }
 aes-gcm = "0.10.3"
 axum = "0.8.9"
 hex = "0.4.3"

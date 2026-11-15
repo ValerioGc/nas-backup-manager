@@ -911,12 +911,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "nas-app-core"
+version = "0.1.0"
+source = "git+https://github.com/ValerioGc/nas-app-core?tag=v0.1.0#84fd049df345f2d7728bad76fe783d3514599a8a"
+dependencies = [
+ "axum",
+ "tokio",
+]
+
+[[package]]
 name = "nas-backup-manager-axum"
 version = "0.9.1"
 dependencies = [
  "aes-gcm",
  "axum",
  "hex",
+ "nas-app-core",
  "notify",
  "serde",
  "serde_json",

@@ -6,11 +6,12 @@ mod runs;
 use aes_gcm::Aes256Gcm;
 use axum::{
     extract::State,
-    http::{header, StatusCode, Uri},
+    http::{StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::{get, post, put},
     Json, Router,
 };
+use nas_app_core::prepare_socket;
 use serde_json::json;
 use sqlx::{
     migrate::Migrator,
@@ -20,12 +21,11 @@ use std::{
     env,
     ffi::OsString,
     fmt,
-    os::unix::fs::FileTypeExt,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
-use tokio::net::{UnixListener, UnixStream};
+use tokio::net::UnixListener;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
@@ -66,7 +66,7 @@ impl ApiError {
     }
 
     fn internal(error: impl fmt::Display) -> Self {
-        eprintln!("Backup rules database error: {error}");
+        eprintln!("backup rules database error ({error})");
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
             message: "Unable to access backup rules".to_owned(),
@@ -163,68 +163,7 @@ fn ui_dir_for(
 }
 
 async fn static_file(State(state): State<AppState>, uri: Uri) -> Response {
-    let path = uri.path();
-    if path.starts_with("/api/") || path == "/api" {
-        return StatusCode::NOT_FOUND.into_response();
-    }
-    let requested = if path == "/" {
-        "index.html"
-    } else {
-        &path[1..]
-    };
-    let relative = Path::new(requested);
-    if !relative
-        .components()
-        .all(|component| matches!(component, Component::Normal(_)))
-    {
-        return StatusCode::BAD_REQUEST.into_response();
-    }
-    let file = state.ui_dir.join(relative);
-    let mime = match file
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .unwrap_or_default()
-    {
-        "html" => "text/html; charset=utf-8",
-        "js" => "text/javascript; charset=utf-8",
-        "css" => "text/css; charset=utf-8",
-        "svg" => "image/svg+xml",
-        "png" => "image/png",
-        "webp" => "image/webp",
-        "ico" => "image/x-icon",
-        "woff2" => "font/woff2",
-        _ => "application/octet-stream",
-    };
-    let cache = if requested.starts_with("assets/") {
-        "public, max-age=31536000, immutable"
-    } else {
-        "no-cache"
-    };
-    match tokio::fs::read(file).await {
-        Ok(bytes) => (
-            [(header::CONTENT_TYPE, mime), (header::CACHE_CONTROL, cache)],
-            bytes,
-        )
-            .into_response(),
-        Err(_) => StatusCode::NOT_FOUND.into_response(),
-    }
-}
-
-async fn prepare_socket(path: &Path) -> Result<(), String> {
-    if let Ok(metadata) = tokio::fs::symlink_metadata(path).await {
-        if !metadata.file_type().is_socket() {
-            return Err(format!("Socket path is occupied: {}", path.display()));
-        }
-        match UnixStream::connect(path).await {
-            Ok(_) => return Err(format!("Socket is already listening: {}", path.display())),
-            Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {}
-            Err(error) => return Err(format!("Unable to check socket: {error}")),
-        }
-        tokio::fs::remove_file(path)
-            .await
-            .map_err(|error| error.to_string())?;
-    }
-    Ok(())
+    nas_app_core::serve_static(&state.ui_dir, uri.path()).await
 }
 
 /// Reads the socket path from `--listen`, falling back to the one set by the launcher.
@@ -288,7 +227,7 @@ async fn run(
         let runner = Arc::clone(&runner);
         async move { runner.declare_background().await }
     });
-    let result = axum::serve(launcher::access::LauncherOnly::new(listener), app)
+    let result = axum::serve(nas_app_core::LauncherOnly::new(listener), app)
         .with_graceful_shutdown(shutdown_signal)
         .await;
     scheduler.abort();
@@ -296,7 +235,7 @@ async fn run(
     runner.shutdown().await;
     runner.database().close().await;
     if let Err(error) = tokio::fs::remove_file(&path).await {
-        eprintln!("Unable to remove socket: {error}");
+        eprintln!("unable to remove the socket ({error})");
     }
     result?;
     Ok(())
