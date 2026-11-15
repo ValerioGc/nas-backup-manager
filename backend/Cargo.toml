@@ -6,7 +6,7 @@ autotests = false
 
 [dependencies]
 nas-app-core = { git = "https://github.com/ValerioGc/nas-app-core", tag = "v0.1.0" }
-aes-gcm = "0.10.3"
+aes-gcm = "0.11.1"
 axum = "0.8.9"
 hex = "0.4.3"
 notify = { version = "8.2.0", default-features = false }
